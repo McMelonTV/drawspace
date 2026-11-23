@@ -195,6 +195,37 @@ class EngineCoreTest {
     }
 
     @Test
+    fun `bucket fill reaches exact 60-degree isometric corner with zero gap even beside adjacent fills`() {
+        var doc = Document.createNew("Iso Corner", CanvasMode.Infinite, nowMs = 8000L)
+        val layerId = doc.primaryStrokeLayer().id
+        val whiteLine = BrushSpec.defaultFor(ToolType.LINE, 0xFFF7F7F5.toInt()) // 5.5px
+        // Isometric rhombus: top=(144, -249.42), right=(192, -221.70), bottom=(144, -193.99), left=(96, -221.70)
+        val top = StrokePoint(144f, -249.42f)
+        val right = StrokePoint(192f, -221.70f)
+        val bottom = StrokePoint(144f, -193.99f)
+        val left = StrokePoint(96f, -221.70f)
+        for ((s, e) in listOf(top to right, right to bottom, bottom to left, left to top)) {
+            doc = DocumentCommand.AddStroke(layerId, Stroke(brush = whiteLine, points = listOf(s, e))).apply(doc).first
+        }
+        // Add an existing overlapping adjacent fill right next to the top corner to prove it cannot carve holes
+        val adjacentFill = Stroke(
+            brush = BrushSpec.defaultFor(ToolType.FILL, 0xFFD93848.toInt()),
+            points = listOf(StrokePoint(120f, -270f), StrokePoint(165f, -246f)),
+        )
+        doc = DocumentCommand.AddStroke(layerId, adjacentFill).apply(doc).first
+
+        val viewport = WorldRect(40f, -300f, 240f, -150f)
+        val yellow = BrushSpec.defaultFor(ToolType.FILL, 0xFFE3A72F.toInt())
+        val res = BucketFillEngine.floodFill(doc, 144f, -221.7f, yellow, visibleWorldBounds = viewport)
+        assertTrue("Expected Success, got $res", res is BucketFillResult.Success)
+        val fillStroke = (res as BucketFillResult.Success).stroke
+        // Even 1px inside the sharp 60° top corner (deep under the 5.5px white lines!) must be solidly filled
+        assertTrue("Corner at (144, -248.4) must be solidly filled", fillStroke.hitTest(144f, -248.4f, 0f))
+        assertTrue("Center must be filled", fillStroke.hitTest(144f, -221.7f, 0f))
+        assertFalse("Outside rhombus must not bleed", fillStroke.hitTest(144f, -253f, 0f))
+    }
+
+    @Test
     fun `grid snapper hits exact square and isometric 3-way intersections`() {
         val squareBg = CanvasBackground(pattern = BackgroundPattern.SQUARE_GRID, spacingPx = 40f)
         val sq = GridSnapper.snapWorld(102f, -58f, squareBg)

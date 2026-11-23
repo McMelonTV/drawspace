@@ -14,20 +14,25 @@ sealed interface BucketFillResult {
 }
 
 /**
- * Pure-Kotlin scanline flood-fill engine for hybrid stroke canvases.
+ * High-precision, zero-seam scanline flood-fill engine for hybrid stroke canvases.
  *
- * Works seamlessly on both Fixed-Size and Infinite canvases (including arbitrary concave shapes
- * and interior holes) by rasterizing nearby visible strokes onto an adaptive high-resolution grid,
- * running a fast scanline BFS, tucking slightly under anti-aliased stroke edges to eliminate halo
- * seams, and merging filled runs into compact axis-aligned rectangles stored as a [ToolType.FILL]
- * stroke (pairs of top-left & bottom-right [StrokePoint]s).
+ * Architecture (Centerline-First Two-Tier Flood):
+ * - **Tier 1 (Centerline Barrier):** Rasterizes only the exact 1-cell 4-connected supercover
+ *   centerline of line/brush strokes (ignoring neighboring `FILL` strokes so adjacent fills can
+ *   never carve holes out of each other). Flood-filling against the centerline flows cleanly all
+ *   the way into razor-sharp 30°/60° acute corners and tucks directly behind the rendered outlines
+ *   with zero sawtooth gaps, zero corner wedges, and zero bleed-through.
+ * - **Tier 2 (Visual Body Fallback):** If a loose freehand shape only closes via overlapping wide
+ *   brush edges (centerlines don't quite meet), automatically retries against the rendered stroke
+ *   body (`0.42×` stroke width) with safe interior barrier tucking so loose sketches still seal.
  */
 object BucketFillEngine {
 
     private const val MAX_LOCAL_GRID_DIM = 1024
     private const val MAX_FALLBACK_GRID_DIM = 1920
-    private const val FILL_TAG_BIT = 0x01000000
-    private const val LINE_BARRIER_BIT = 0x02000000
+
+    private const val CENTERLINE_BIT = 1
+    private const val STROKE_BODY_BIT = 2
 
     fun floodFill(
         document: Document,
@@ -42,7 +47,30 @@ object BucketFillEngine {
         }
 
         val strokes = document.visibleStrokes()
-        // For zoomed-in accuracy, try filling inside the visible viewport first (clamped to artboard).
+        val lineStrokes = strokes.filter {
+            it.brush.tool != ToolType.ERASER && it.brush.tool != ToolType.FILL && it.points.isNotEmpty()
+        }
+
+        // Ignore accidental taps directly on top of an outline stroke so outlines never get filled.
+        for (s in lineStrokes) {
+            if (s.hitTest(worldX, worldY, eraserRadius = 0f)) {
+                return BucketFillResult.AlreadyFilled
+            }
+        }
+
+        // Avoid stacking identical duplicate fills on top of an already identically colored region.
+        val topExistingFill = strokes.lastOrNull { s ->
+            s.brush.tool == ToolType.FILL && s.hitTest(worldX, worldY, eraserRadius = 0f)
+        }
+        if (topExistingFill != null &&
+            topExistingFill.brush.colorArgb == fillBrush.colorArgb &&
+            fillBrush.opacity >= 0.99f &&
+            topExistingFill.brush.opacity >= 0.99f
+        ) {
+            return BucketFillResult.AlreadyFilled
+        }
+
+        // Try high-res viewport-local window first for zoomed-in precision.
         if (visibleWorldBounds != null && !visibleWorldBounds.isEmpty) {
             val localRect = if (fixedBounds != null) {
                 intersectRect(visibleWorldBounds.expanded(16f), fixedBounds)
@@ -50,8 +78,8 @@ object BucketFillEngine {
                 visibleWorldBounds.expanded(16f)
             }
             if (localRect != null && localRect.contains(worldX, worldY)) {
-                val localAttempt = runGridFill(
-                    strokes = strokes,
+                val localAttempt = runTwoTierFill(
+                    lineStrokes = lineStrokes,
                     workRect = localRect,
                     seedWorldX = worldX,
                     seedWorldY = worldY,
@@ -72,8 +100,8 @@ object BucketFillEngine {
             val content = document.contentBounds() ?: return BucketFillResult.OpenRegion
             content.union(WorldRect.fromPoint(worldX, worldY, 24f)).expanded(24f)
         }
-        return runGridFill(
-            strokes = strokes,
+        return runTwoTierFill(
+            lineStrokes = lineStrokes,
             workRect = fallbackRect,
             seedWorldX = worldX,
             seedWorldY = worldY,
@@ -83,8 +111,8 @@ object BucketFillEngine {
         )
     }
 
-    private fun runGridFill(
-        strokes: List<Stroke>,
+    private fun runTwoTierFill(
+        lineStrokes: List<Stroke>,
         workRect: WorldRect,
         seedWorldX: Float,
         seedWorldY: Float,
@@ -98,149 +126,156 @@ object BucketFillEngine {
         val gridW = ceil(worldW / cellSize).toInt().coerceIn(8, maxGridDim)
         val gridH = ceil(worldH / cellSize).toInt().coerceIn(8, maxGridDim)
 
-        val seedX = ((seedWorldX - workRect.left) / cellSize).toInt().coerceIn(0, gridW - 1)
-        val seedY = ((seedWorldY - workRect.top) / cellSize).toInt().coerceIn(0, gridH - 1)
+        val seedX = floor((seedWorldX - workRect.left) / cellSize).toInt().coerceIn(0, gridW - 1)
+        val seedY = floor((seedWorldY - workRect.top) / cellSize).toInt().coerceIn(0, gridH - 1)
 
-        // Rasterize existing strokes & fills onto grid:
-        // 0 = empty, FILL_TAG_BIT | rgb = filled region, LINE_BARRIER_BIT | rgb = line/brush stroke
-        val grid = IntArray(gridW * gridH)
-        // Rasterize existing fills first, then line strokes on top (matching visual render order)
-        for (stroke in strokes) {
-            if (stroke.brush.tool != ToolType.FILL || stroke.points.isEmpty()) continue
+        // Single pass rasterizes BOTH exact 1-cell CENTERLINE_BIT and visual STROKE_BODY_BIT
+        val mask = ByteArray(gridW * gridH)
+        var maxBodyRadiusCells = 1f
+        for (stroke in lineStrokes) {
             if (!stroke.bounds.intersects(workRect)) continue
-            val tag = (stroke.brush.colorArgb and 0x00FFFFFF) or FILL_TAG_BIT
-            rasterizeFillStroke(stroke, workRect, cellSize, grid, gridW, gridH, tag)
-        }
-        var maxStrokeRadiusCells = 1f
-        for (stroke in strokes) {
-            if (stroke.brush.tool == ToolType.ERASER || stroke.brush.tool == ToolType.FILL || stroke.points.isEmpty()) continue
-            if (!stroke.bounds.intersects(workRect)) continue
-            val tag = (stroke.brush.colorArgb and 0x00FFFFFF) or LINE_BARRIER_BIT
-            val r = rasterizeLineStroke(stroke, workRect, cellSize, grid, gridW, gridH, tag)
-            if (r > maxStrokeRadiusCells) maxStrokeRadiusCells = r
+            val r = rasterizeStrokeMask(stroke, workRect, cellSize, mask, gridW, gridH)
+            if (r > maxBodyRadiusCells) maxBodyRadiusCells = r
         }
 
-        val targetTag = grid[seedY * gridW + seedX]
-        val desiredTag = (fillBrush.colorArgb and 0x00FFFFFF) or FILL_TAG_BIT
-        if (targetTag == desiredTag && fillBrush.opacity >= 0.99f) {
+        val seedIdx = seedY * gridW + seedX
+        if ((mask[seedIdx].toInt() and CENTERLINE_BIT) != 0) {
             return BucketFillResult.AlreadyFilled
         }
 
-        // Fast iterative scanline flood-fill
-        val filled = BooleanArray(gridW * gridH)
-        val stackX = IntArray(gridW * gridH)
-        val stackY = IntArray(gridW * gridH)
+        // Tier 1: Flood strictly against exact 1-cell centerlines -> zero corner wedges, zero sawtooths!
+        val tier1 = scanlineFlood(
+            mask = mask,
+            barrierBit = CENTERLINE_BIT,
+            gridW = gridW,
+            gridH = gridH,
+            seedX = seedX,
+            seedY = seedY,
+            allowBoundaryTouch = allowBoundaryTouch,
+        )
+        if (tier1 != null) {
+            // Exact 0.5-cell tuck meets the stroke centerline seamlessly without ever crossing it.
+            return buildFillStroke(tier1, gridW, gridH, workRect, cellSize, fillBrush, tuckCells = 0.5f)
+        }
+
+        // Tier 2: Loose freehand strokes whose centerlines didn't quite meet, but visual edges closed.
+        // Only try Tier 2 when not allowed to touch boundary (i.e. looking for an enclosed shape).
+        if (!allowBoundaryTouch && (mask[seedIdx].toInt() and STROKE_BODY_BIT) == 0) {
+            val tier2 = scanlineFlood(
+                mask = mask,
+                barrierBit = STROKE_BODY_BIT,
+                gridW = gridW,
+                gridH = gridH,
+                seedX = seedX,
+                seedY = seedY,
+                allowBoundaryTouch = false,
+            )
+            if (tier2 != null) {
+                val maxDepth = ceil(maxBodyRadiusCells * 1.5f).toInt().coerceIn(2, 24)
+                val tucked = tuckIntoBodyBarrier(tier2, mask, gridW, gridH, maxDepth)
+                return buildFillStroke(tucked, gridW, gridH, workRect, cellSize, fillBrush, tuckCells = 0.35f)
+            }
+        }
+
+        return BucketFillResult.OpenRegion
+    }
+
+    /**
+     * Iterative 4-connected scanline BFS. Returns `null` if the flood leaks to the boundary
+     * when [allowBoundaryTouch] is false.
+     */
+    private fun scanlineFlood(
+        mask: ByteArray,
+        barrierBit: Int,
+        gridW: Int,
+        gridH: Int,
+        seedX: Int,
+        seedY: Int,
+        allowBoundaryTouch: Boolean,
+    ): BooleanArray? {
+        val total = gridW * gridH
+        val filled = BooleanArray(total)
+        val stackX = IntArray(total)
+        val stackY = IntArray(total)
         var sp = 0
         stackX[sp] = seedX
         stackY[sp] = seedY
         sp++
 
-        var touchedBoundary = false
         var filledCount = 0
-
         while (sp > 0) {
             sp--
             val cx = stackX[sp]
             val cy = stackY[sp]
-            val rowOffset = cy * gridW
-            if (filled[rowOffset + cx] || grid[rowOffset + cx] != targetTag) continue
+            val rowOff = cy * gridW
+            if (filled[rowOff + cx] || (mask[rowOff + cx].toInt() and barrierBit) != 0) continue
 
             var lx = cx
-            while (lx > 0 && !filled[rowOffset + lx - 1] && grid[rowOffset + lx - 1] == targetTag) {
+            while (lx > 0 && !filled[rowOff + lx - 1] && (mask[rowOff + lx - 1].toInt() and barrierBit) == 0) {
                 lx--
             }
             var rx = cx
-            while (rx < gridW - 1 && !filled[rowOffset + rx + 1] && grid[rowOffset + rx + 1] == targetTag) {
+            while (rx < gridW - 1 && !filled[rowOff + rx + 1] && (mask[rowOff + rx + 1].toInt() and barrierBit) == 0) {
                 rx++
             }
 
             if (!allowBoundaryTouch && (lx == 0 || rx == gridW - 1 || cy == 0 || cy == gridH - 1)) {
-                touchedBoundary = true
-                break
+                return null
             }
 
             var spanAbove = false
             var spanBelow = false
             for (x in lx..rx) {
-                filled[rowOffset + x] = true
+                filled[rowOff + x] = true
                 filledCount++
 
                 if (cy > 0) {
                     val idxUp = (cy - 1) * gridW + x
-                    val matchUp = !filled[idxUp] && grid[idxUp] == targetTag
-                    if (!spanAbove && matchUp) {
+                    val openUp = !filled[idxUp] && (mask[idxUp].toInt() and barrierBit) == 0
+                    if (!spanAbove && openUp) {
                         stackX[sp] = x
                         stackY[sp] = cy - 1
                         sp++
                         spanAbove = true
-                    } else if (spanAbove && !matchUp) {
+                    } else if (spanAbove && !openUp) {
                         spanAbove = false
                     }
                 }
                 if (cy < gridH - 1) {
                     val idxDown = (cy + 1) * gridW + x
-                    val matchDown = !filled[idxDown] && grid[idxDown] == targetTag
-                    if (!spanBelow && matchDown) {
+                    val openDown = !filled[idxDown] && (mask[idxDown].toInt() and barrierBit) == 0
+                    if (!spanBelow && openDown) {
                         stackX[sp] = x
                         stackY[sp] = cy + 1
                         sp++
                         spanBelow = true
-                    } else if (spanBelow && !matchDown) {
+                    } else if (spanBelow && !openDown) {
                         spanBelow = false
                     }
                 }
             }
         }
-
-        if (touchedBoundary || filledCount == 0) {
-            return BucketFillResult.OpenRegion
-        }
-
-        // Tuck into surrounding LINE_BARRIER pixels via depth-bounded BFS through safe interior
-        // barrier cells (cells that never border an unfilled non-barrier pixel on the far side).
-        // This eliminates both diagonal sawtooth specks and acute-corner wedges on thick strokes.
-        val maxTuckDepth = ceil(maxStrokeRadiusCells * 1.8f).toInt().coerceIn(2, 28)
-        val tucked = tuckIntoLineBarriers(filled, grid, gridW, gridH, maxTuckDepth)
-
-        // Convert filled boolean mask into vertically merged world-space rectangles.
-        val rects = extractMergedRects(tucked, gridW, gridH, workRect, cellSize)
-        if (rects.isEmpty()) return BucketFillResult.OpenRegion
-
-        val pts = ArrayList<StrokePoint>(rects.size * 2)
-        var minX = Float.POSITIVE_INFINITY
-        var minY = Float.POSITIVE_INFINITY
-        var maxX = Float.NEGATIVE_INFINITY
-        var maxY = Float.NEGATIVE_INFINITY
-        for (r in rects) {
-            pts.add(StrokePoint(r.left, r.top, pressure = 1f))
-            pts.add(StrokePoint(r.right, r.bottom, pressure = 1f))
-            minX = min(minX, r.left)
-            minY = min(minY, r.top)
-            maxX = max(maxX, r.right)
-            maxY = max(maxY, r.bottom)
-        }
-
-        val stroke = Stroke(
-            id = Ulid.next(),
-            brush = fillBrush.copy(tool = ToolType.FILL),
-            points = pts,
-            bounds = WorldRect(minX, minY, maxX, maxY),
-        )
-        return BucketFillResult.Success(stroke)
+        return if (filledCount > 0) filled else null
     }
 
-    private fun tuckIntoLineBarriers(
+    /**
+     * Used only for Tier 2 (loose freehand edge-closed strokes): expands strictly into stroke-body
+     * pixels up to the stroke centerline, stopping before crossing `CENTERLINE_BIT` or outside space.
+     */
+    private fun tuckIntoBodyBarrier(
         origFilled: BooleanArray,
-        grid: IntArray,
+        mask: ByteArray,
         gridW: Int,
         gridH: Int,
         maxDepth: Int,
     ): BooleanArray {
-        val total = gridW * gridH
         val out = origFilled.copyOf()
-        val depth = IntArray(total) { -1 }
+        val depth = IntArray(gridW * gridH) { -1 }
 
-        fun isSafeInteriorBarrier(x: Int, y: Int): Boolean {
+        fun isSafeBody(x: Int, y: Int): Boolean {
+            val m = mask[y * gridW + x].toInt()
+            if ((m and STROKE_BODY_BIT) == 0) return false
+            if ((m and CENTERLINE_BIT) != 0) return false
             val minNy = (y - 1).coerceAtLeast(0)
             val maxNy = (y + 1).coerceAtMost(gridH - 1)
             val minNx = (x - 1).coerceAtLeast(0)
@@ -249,7 +284,7 @@ object BucketFillEngine {
                 val nRow = ny * gridW
                 for (nx in minNx..maxNx) {
                     val nIdx = nRow + nx
-                    if (!origFilled[nIdx] && (grid[nIdx] and LINE_BARRIER_BIT) == 0) {
+                    if (!origFilled[nIdx] && (mask[nIdx].toInt() and STROKE_BODY_BIT) == 0) {
                         return false
                     }
                 }
@@ -257,8 +292,7 @@ object BucketFillEngine {
             return true
         }
 
-        // Queue indices of barrier cells we can keep expanding from
-        var queue = IntArray(4096)
+        var queue = IntArray(2048)
         var head = 0
         var tail = 0
         fun enqueue(idx: Int) {
@@ -266,12 +300,11 @@ object BucketFillEngine {
             queue[tail++] = idx
         }
 
-        // Seed depth-1 barrier cells directly adjacent (8-connected) to the filled region
         for (y in 0 until gridH) {
             val rowOff = y * gridW
             for (x in 0 until gridW) {
                 val idx = rowOff + x
-                if (origFilled[idx] || (grid[idx] and LINE_BARRIER_BIT) == 0) continue
+                if (origFilled[idx] || (mask[idx].toInt() and STROKE_BODY_BIT) == 0) continue
                 var touchesFill = false
                 val minNy = (y - 1).coerceAtLeast(0)
                 val maxNy = (y + 1).coerceAtMost(gridH - 1)
@@ -289,15 +322,11 @@ object BucketFillEngine {
                 if (touchesFill) {
                     out[idx] = true
                     depth[idx] = 1
-                    // Only expand further if this cell doesn't already border the outside of the stroke
-                    if (maxDepth > 1 && isSafeInteriorBarrier(x, y)) {
-                        enqueue(idx)
-                    }
+                    if (maxDepth > 1 && isSafeBody(x, y)) enqueue(idx)
                 }
             }
         }
 
-        // BFS through safe interior barrier pixels up to maxDepth (fills acute corner wedges cleanly)
         while (head < tail) {
             val idx = queue[head++]
             val nextD = depth[idx] + 1
@@ -312,19 +341,51 @@ object BucketFillEngine {
                 val nRow = ny * gridW
                 for (nx in minNx..maxNx) {
                     val nIdx = nRow + nx
-                    if (out[nIdx] || (grid[nIdx] and LINE_BARRIER_BIT) == 0) continue
-                    if (isSafeInteriorBarrier(nx, ny)) {
+                    if (!out[nIdx] && isSafeBody(nx, ny)) {
                         out[nIdx] = true
                         depth[nIdx] = nextD
-                        if (nextD < maxDepth) {
-                            enqueue(nIdx)
-                        }
+                        if (nextD < maxDepth) enqueue(nIdx)
                     }
                 }
             }
         }
-
         return out
+    }
+
+    private fun buildFillStroke(
+        filled: BooleanArray,
+        gridW: Int,
+        gridH: Int,
+        workRect: WorldRect,
+        cellSize: Float,
+        fillBrush: BrushSpec,
+        tuckCells: Float,
+    ): BucketFillResult {
+        val rects = extractMergedRects(filled, gridW, gridH, workRect, cellSize, tuckCells)
+        if (rects.isEmpty()) return BucketFillResult.OpenRegion
+
+        val pts = ArrayList<StrokePoint>(rects.size * 2)
+        var minX = Float.POSITIVE_INFINITY
+        var minY = Float.POSITIVE_INFINITY
+        var maxX = Float.NEGATIVE_INFINITY
+        var maxY = Float.NEGATIVE_INFINITY
+        for (r in rects) {
+            pts.add(StrokePoint(r.left, r.top, pressure = 1f))
+            pts.add(StrokePoint(r.right, r.bottom, pressure = 1f))
+            minX = min(minX, r.left)
+            minY = min(minY, r.top)
+            maxX = max(maxX, r.right)
+            maxY = max(maxY, r.bottom)
+        }
+
+        return BucketFillResult.Success(
+            Stroke(
+                id = Ulid.next(),
+                brush = fillBrush.copy(tool = ToolType.FILL),
+                points = pts,
+                bounds = WorldRect(minX, minY, maxX, maxY),
+            ),
+        )
     }
 
     private fun extractMergedRects(
@@ -333,25 +394,25 @@ object BucketFillEngine {
         gridH: Int,
         workRect: WorldRect,
         cellSize: Float,
+        tuckCells: Float,
     ): List<WorldRect> {
-        val tuck = cellSize * 0.35f
-        // Track active spans from the previous row: key = (startX shl 16) or endX -> ActiveRect
+        val tuck = cellSize * tuckCells
         data class ActiveSpan(val x0: Int, val x1: Int, val y0: Int, var y1: Int)
         var prevActive = HashMap<Int, ActiveSpan>()
         val finished = ArrayList<ActiveSpan>(256)
 
         for (y in 0 until gridH) {
-            val rowOffset = y * gridW
+            val rowOff = y * gridW
             val nextActive = HashMap<Int, ActiveSpan>()
             var x = 0
             while (x < gridW) {
-                if (!filled[rowOffset + x]) {
+                if (!filled[rowOff + x]) {
                     x++
                     continue
                 }
                 val startX = x
-                while (x < gridW && filled[rowOffset + x]) x++
-                val endX = x // exclusive
+                while (x < gridW && filled[rowOff + x]) x++
+                val endX = x
                 val key = (startX shl 16) or endX
                 val continued = prevActive.remove(key)
                 if (continued != null) {
@@ -375,60 +436,32 @@ object BucketFillEngine {
         }
     }
 
-    private fun rasterizeFillStroke(
+    /**
+     * Marks both the exact 1-cell 4-connected supercover centerline ([CENTERLINE_BIT]) and
+     * the visual stroke body ([STROKE_BODY_BIT]) in a single pass.
+     */
+    private fun rasterizeStrokeMask(
         stroke: Stroke,
         workRect: WorldRect,
         cellSize: Float,
-        grid: IntArray,
+        mask: ByteArray,
         gridW: Int,
         gridH: Int,
-        tag: Int,
-    ) {
-        val pts = stroke.points
-        var i = 0
-        while (i + 1 < pts.size) {
-            val tl = pts[i]
-            val br = pts[i + 1]
-            val x0 = floor((tl.x - workRect.left) / cellSize).toInt().coerceIn(0, gridW - 1)
-            val x1 = ceil((br.x - workRect.left) / cellSize).toInt().coerceIn(0, gridW - 1)
-            val y0 = floor((tl.y - workRect.top) / cellSize).toInt().coerceIn(0, gridH - 1)
-            val y1 = ceil((br.y - workRect.top) / cellSize).toInt().coerceIn(0, gridH - 1)
-            for (y in y0..y1) {
-                val rowOff = y * gridW
-                for (x in x0..x1) {
-                    grid[rowOff + x] = tag
-                }
-            }
-            i += 2
-        }
-    }
-
-    private fun rasterizeLineStroke(
-        stroke: Stroke,
-        workRect: WorldRect,
-        cellSize: Float,
-        grid: IntArray,
-        gridW: Int,
-        gridH: Int,
-        tag: Int,
     ): Float {
         val pts = stroke.points
         val brush = stroke.brush
-        // Rasterize slightly narrower than the rendered stroke (0.34x diameter) so fills tuck well
-        // underneath the anti-aliased edge, and use 4-connected supercover stepping for hairlines
-        // so thin strokes stay 100% watertight without bloating into giant multi-pixel barriers.
-        val baseRadiusCells = brush.sizeWorldPx * 0.34f / cellSize
-        var maxR = baseRadiusCells
+        var maxR = 0.5f
 
-        fun stampDisc(gx: Float, gy: Float, rCells: Float) {
-            // Grid cell (x, y) covers [x, x+1) x [y, y+1) with center at (x + 0.5, y + 0.5),
-            // matching seedX/seedY and extractMergedRects with zero half-cell shift.
-            val cx = floor(gx).toInt()
-            val cy = floor(gy).toInt()
+        fun setBit(x: Int, y: Int, bit: Int) {
+            if (x in 0 until gridW && y in 0 until gridH) {
+                val idx = y * gridW + x
+                mask[idx] = (mask[idx].toInt() or bit).toByte()
+            }
+        }
+
+        fun stampBodyDisc(gx: Float, gy: Float, rCells: Float) {
             if (rCells <= 0.65f) {
-                if (cx in 0 until gridW && cy in 0 until gridH) {
-                    grid[cy * gridW + cx] = tag
-                }
+                setBit(floor(gx).toInt(), floor(gy).toInt(), STROKE_BODY_BIT)
                 return
             }
             val rSq = rCells * rCells
@@ -442,15 +475,19 @@ object BucketFillEngine {
                 for (x in minX..maxX) {
                     val dx = (x + 0.5f) - gx
                     if (dx * dx + dy * dy <= rSq) {
-                        grid[rowOff + x] = tag
+                        mask[rowOff + x] = (mask[rowOff + x].toInt() or STROKE_BODY_BIT).toByte()
                     }
                 }
             }
         }
 
         if (pts.size == 1) {
-            stampDisc((pts[0].x - workRect.left) / cellSize, (pts[0].y - workRect.top) / cellSize, baseRadiusCells)
-            return maxR
+            val gx = (pts[0].x - workRect.left) / cellSize
+            val gy = (pts[0].y - workRect.top) / cellSize
+            val r = brush.sizeWorldPx * 0.42f / cellSize
+            setBit(floor(gx).toInt(), floor(gy).toInt(), CENTERLINE_BIT or STROKE_BODY_BIT)
+            stampBodyDisc(gx, gy, r)
+            return max(maxR, r)
         }
 
         for (i in 0 until pts.lastIndex) {
@@ -463,34 +500,36 @@ object BucketFillEngine {
             val dist = hypot(bx - ax, by - ay)
             val avgP = (a.pressure + b.pressure) * 0.5f
             val pFactor = (1f - brush.pressureSizeSensitivity) + brush.pressureSizeSensitivity * avgP.coerceIn(0.1f, 1.3f)
-            val rCells = brush.sizeWorldPx * pFactor * 0.34f / cellSize
-            if (rCells > maxR) maxR = rCells
-            val stepLen = if (rCells <= 1.25f) 0.35f else max(rCells * 0.45f, 0.45f)
-            val steps = ceil(dist / stepLen).toInt().coerceAtLeast(1)
+            val rBody = brush.sizeWorldPx * pFactor * 0.42f / cellSize
+            if (rBody > maxR) maxR = rBody
 
+            // 1. Exact 4-connected supercover centerline (always 1-cell thin, zero corner wedges!)
+            val centerSteps = ceil(dist * 2.5f).toInt().coerceAtLeast(1)
             var prevCx = floor(ax).toInt()
             var prevCy = floor(ay).toInt()
-            for (s in 0..steps) {
-                val t = s.toFloat() / steps
+            setBit(prevCx, prevCy, CENTERLINE_BIT or STROKE_BODY_BIT)
+            for (s in 1..centerSteps) {
+                val t = s.toFloat() / centerSteps
                 val gx = ax + (bx - ax) * t
                 val gy = ay + (by - ay) * t
                 val cx = floor(gx).toInt()
                 val cy = floor(gy).toInt()
-                // Always bridge diagonal pixel steps so 4-connected flood-fill can never leak
-                // through thin or medium diagonal strokes at any zoom level.
                 if (cx != prevCx && cy != prevCy) {
-                    if (prevCx in 0 until gridW && cy in 0 until gridH) {
-                        grid[cy * gridW + prevCx] = tag
-                    }
+                    setBit(prevCx, cy, CENTERLINE_BIT or STROKE_BODY_BIT)
                 }
-                if (cx in 0 until gridW && cy in 0 until gridH) {
-                    grid[cy * gridW + cx] = tag
-                }
-                if (rCells > 0.65f) {
-                    stampDisc(gx, gy, rCells)
-                }
+                setBit(cx, cy, CENTERLINE_BIT or STROKE_BODY_BIT)
                 prevCx = cx
                 prevCy = cy
+            }
+
+            // 2. Visual stroke body (only stamped at coarse stride for Tier-2 fallback & tap rejection)
+            if (rBody > 0.65f) {
+                val bodyStep = max(rBody * 0.55f, 0.75f)
+                val bodySteps = ceil(dist / bodyStep).toInt().coerceAtLeast(1)
+                for (s in 0..bodySteps) {
+                    val t = s.toFloat() / bodySteps
+                    stampBodyDisc(ax + (bx - ax) * t, ay + (by - ay) * t, rBody)
+                }
             }
         }
         return maxR
