@@ -52,6 +52,8 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
     @Volatile
     private var snapLineAnglesEnabled = false
     @Volatile
+    private var hidePatternEnabled = false
+    @Volatile
     private var allowFingerDraw = true
     @Volatile
     private var listener: Listener? = null
@@ -106,6 +108,7 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
                 camera = cameraRef.get(),
                 appTheme = themeRef.get(),
                 antiAliasing = aaModeRef.get(),
+                hidePattern = hidePatternEnabled,
             )
         }
     }
@@ -245,6 +248,13 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
 
     fun setSnapLineAngles(enabled: Boolean) {
         snapLineAnglesEnabled = enabled
+    }
+
+    fun setHidePattern(hidden: Boolean) {
+        if (hidePatternEnabled != hidden) {
+            hidePatternEnabled = hidden
+            requestFullRedraw()
+        }
     }
 
     fun setAllowFingerDrawing(enabled: Boolean) {

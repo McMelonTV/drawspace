@@ -226,6 +226,7 @@ private fun DocumentCard(
                 DocumentThumbnailCanvas(
                     summary = summary,
                     appTheme = appTheme,
+                    showPattern = false,
                     modifier = Modifier.fillMaxSize(),
                 )
 

@@ -55,6 +55,7 @@ data class AppUiState(
     val palette: ColorPalette = ColorPalette(),
     val allowFingerDrawing: Boolean = true,
     val snapLineAngles: Boolean = false,
+    val hidePatternTemporarily: Boolean = false,
     val lockMode: CanvasLockMode = CanvasLockMode.UNLOCKED,
     val canUndo: Boolean = false,
     val canRedo: Boolean = false,
@@ -235,6 +236,7 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
             state.copy(
                 activeDocument = updated,
                 activeColorArgb = adaptInkColor(state.activeColorArgb, updated, appTheme),
+                hidePatternTemporarily = if (nextBg.pattern != doc.meta.background.pattern) false else state.hidePatternTemporarily,
                 saveStatus = "Autosaving…",
             )
         }
@@ -312,6 +314,10 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun toggleSnapLineAngles() {
         _uiState.update { it.copy(snapLineAngles = !it.snapLineAngles) }
+    }
+
+    fun toggleHidePatternTemporarily() {
+        _uiState.update { it.copy(hidePatternTemporarily = !it.hidePatternTemporarily) }
     }
 
     fun cycleLockMode() {
@@ -525,6 +531,7 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
             state.copy(
                 activeDocument = doc,
                 allowFingerDrawing = !state.settings.stylusOnlyDefault,
+                hidePatternTemporarily = false,
                 lockMode = state.settings.defaultLockMode,
                 activeColorArgb = adaptInkColor(state.activeColorArgb, doc, state.appTheme),
                 canUndo = commandStack.canUndo,

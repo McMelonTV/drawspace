@@ -158,6 +158,7 @@ internal class DrawspaceGlEngine {
         camera: ViewportCamera,
         appTheme: AppTheme,
         antiAliasing: AntiAliasingMode,
+        hidePattern: Boolean,
     ) {
         ensureInitialized()
 
@@ -182,6 +183,7 @@ internal class DrawspaceGlEngine {
                 camera = camera,
                 appTheme = appTheme,
                 aaFeatherPx = antiAliasing.featherPx,
+                hidePattern = hidePattern,
             )
 
             // Downsample supersampled FBO into destination multi-buffered surface
@@ -217,6 +219,7 @@ internal class DrawspaceGlEngine {
                 camera = camera,
                 appTheme = appTheme,
                 aaFeatherPx = antiAliasing.featherPx,
+                hidePattern = hidePattern,
             )
         }
     }
@@ -236,6 +239,7 @@ internal class DrawspaceGlEngine {
         camera: ViewportCamera,
         appTheme: AppTheme,
         aaFeatherPx: Float,
+        hidePattern: Boolean,
     ) {
         GLES30.glViewport(0, 0, renderWidth, renderHeight)
         GLES30.glDisable(GLES30.GL_DEPTH_TEST)
@@ -247,7 +251,7 @@ internal class DrawspaceGlEngine {
             GLES30.GL_ONE_MINUS_SRC_ALPHA,
         )
 
-        drawBackdrop(bufferWidth, bufferHeight, pixelScale, bufferTransform, document, camera, appTheme)
+        drawBackdrop(bufferWidth, bufferHeight, pixelScale, bufferTransform, document, camera, appTheme, hidePattern)
 
         val docStrokes = document.visibleStrokes()
         val strokes = if (pendingStrokes.isEmpty() && pendingErasedIds.isEmpty()) {
@@ -450,6 +454,7 @@ internal class DrawspaceGlEngine {
         document: Document,
         camera: ViewportCamera,
         appTheme: AppTheme,
+        hidePattern: Boolean,
     ) {
         val bg = document.meta.background
         val effectiveTheme = bg.effectiveTheme(appTheme)
@@ -473,18 +478,22 @@ internal class DrawspaceGlEngine {
             GLES30.glUniform4f(uBackdropBounds, 0f, 0f, 0f, 0f)
         }
         GLES30.glUniform1f(uBackdropZoom, camera.zoom * pixelScale)
-        val patternMode = when (bg.pattern) {
-            BackgroundPattern.BLANK -> 0f
-            BackgroundPattern.DOT_GRID -> 1f
-            BackgroundPattern.SQUARE_GRID -> 2f
-            BackgroundPattern.LINED -> 3f
-            BackgroundPattern.ISOMETRIC -> 4f
-            BackgroundPattern.CROSS_GRID -> 5f
+        val patternMode = if (hidePattern) {
+            0f
+        } else {
+            when (bg.pattern) {
+                BackgroundPattern.BLANK -> 0f
+                BackgroundPattern.DOT_GRID -> 1f
+                BackgroundPattern.SQUARE_GRID -> 2f
+                BackgroundPattern.LINED -> 3f
+                BackgroundPattern.ISOMETRIC -> 4f
+                BackgroundPattern.CROSS_GRID -> 5f
+            }
         }
         GLES30.glUniform1f(uBackdropPatternMode, patternMode)
         GLES30.glUniform1f(uBackdropSpacing, bg.spacingPx.coerceIn(12f, 240f))
         GLES30.glUniform1f(uBackdropOpacity, bg.opacity.coerceIn(0f, 1f))
-        GLES30.glUniform1f(uBackdropShowOrigin, if (bg.showOriginMarker && bounds == null) 1f else 0f)
+        GLES30.glUniform1f(uBackdropShowOrigin, if (!hidePattern && bg.showOriginMarker && bounds == null) 1f else 0f)
         GLES30.glUniform1f(uBackdropIsDarkSurround, if (effectiveTheme == AppTheme.LIGHT) 0f else 1f)
 
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, quadVbo)

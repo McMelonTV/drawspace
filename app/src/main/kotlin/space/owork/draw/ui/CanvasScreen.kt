@@ -38,6 +38,7 @@ import androidx.compose.material.icons.outlined.ColorLens
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Draw
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.GridOff
 import androidx.compose.material.icons.outlined.GridOn
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Lock
@@ -45,6 +46,7 @@ import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.ScreenRotationAlt
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.TouchApp
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -112,6 +114,7 @@ fun CanvasScreen(
     onOpacityChange: (Float) -> Unit,
     onToggleFingerDrawing: () -> Unit,
     onToggleSnapLineAngles: () -> Unit,
+    onToggleHidePattern: () -> Unit,
     onCycleLockMode: () -> Unit,
     onUpdateBackground: ((CanvasBackground) -> CanvasBackground) -> Unit,
     onUndo: () -> Unit,
@@ -160,6 +163,7 @@ fun CanvasScreen(
                     setStrokeSmoothing(state.settings.strokeSmoothing)
                     setRoundTurnsAndEnds(state.settings.roundTurnsAndEnds)
                     setSnapLineAngles(state.snapLineAngles)
+                    setHidePattern(state.hidePatternTemporarily)
                     setDocument(doc)
                     setBrush(state.activeBrush)
                     setAllowFingerDrawing(state.allowFingerDrawing)
@@ -172,6 +176,7 @@ fun CanvasScreen(
                 view.setStrokeSmoothing(state.settings.strokeSmoothing)
                 view.setRoundTurnsAndEnds(state.settings.roundTurnsAndEnds)
                 view.setSnapLineAngles(state.snapLineAngles)
+                view.setHidePattern(state.hidePatternTemporarily)
                 view.setDocument(doc)
                 view.setBrush(state.activeBrush)
                 view.setAllowFingerDrawing(state.allowFingerDrawing)
@@ -285,11 +290,28 @@ fun CanvasScreen(
                         }
                     }
 
+                    if (doc.meta.background.pattern != BackgroundPattern.BLANK) {
+                        IconButton(
+                            onClick = onToggleHidePattern,
+                            modifier = Modifier.size(38.dp),
+                        ) {
+                            Icon(
+                                imageVector = if (state.hidePatternTemporarily) Icons.Outlined.GridOff else Icons.Outlined.GridOn,
+                                contentDescription = if (state.hidePatternTemporarily) "Show background pattern" else "Hide background pattern temporarily",
+                                tint = if (state.hidePatternTemporarily) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
+                        }
+                    }
+
                     IconButton(
                         onClick = { showAppearanceSheet = true },
                         modifier = Modifier.size(38.dp),
                     ) {
-                        Icon(Icons.Outlined.GridOn, contentDescription = "Canvas theme & background")
+                        Icon(Icons.Outlined.Tune, contentDescription = "Canvas theme & background")
                     }
                     IconButton(
                         onClick = { surfaceRef?.fitToView() },
@@ -628,6 +650,25 @@ fun CanvasScreen(
                 }
 
                 if (bg.pattern != BackgroundPattern.BLANK) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Temporarily hide pattern", style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                "Keeps your pattern settings without saving changes",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Switch(
+                            checked = state.hidePatternTemporarily,
+                            onCheckedChange = { onToggleHidePattern() },
+                        )
+                    }
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(20.dp),
