@@ -29,6 +29,21 @@ data class Stroke(
      * Checks whether a world-space point (with an eraser radius) intersects this stroke.
      */
     fun hitTest(wx: Float, wy: Float, eraserRadius: Float): Boolean {
+        if (brush.tool == ToolType.FILL) {
+            if (!bounds.expanded(eraserRadius).contains(wx, wy)) return false
+            var i = 0
+            while (i + 1 < points.size) {
+                val tl = points[i]
+                val br = points[i + 1]
+                if (wx >= tl.x - eraserRadius && wx <= br.x + eraserRadius &&
+                    wy >= tl.y - eraserRadius && wy <= br.y + eraserRadius
+                ) {
+                    return true
+                }
+                i += 2
+            }
+            return false
+        }
         val hitRadius = eraserRadius + brush.sizeWorldPx * 0.6f
         if (!bounds.expanded(eraserRadius).contains(wx, wy)) return false
         if (points.isEmpty()) return false

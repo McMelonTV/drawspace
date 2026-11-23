@@ -17,6 +17,8 @@ import kotlinx.serialization.encodeToString
 import space.owork.draw.engine.AppSettings
 import space.owork.draw.engine.AppTheme
 import space.owork.draw.engine.BrushSpec
+import space.owork.draw.engine.BucketFillEngine
+import space.owork.draw.engine.BucketFillResult
 import space.owork.draw.engine.CameraLocks
 import space.owork.draw.engine.CanvasBackground
 import space.owork.draw.engine.CanvasLockMode
@@ -31,6 +33,7 @@ import space.owork.draw.engine.DocumentDelta
 import space.owork.draw.engine.Stroke
 import space.owork.draw.engine.ToolType
 import space.owork.draw.engine.ViewportCamera
+import space.owork.draw.engine.WorldRect
 import space.owork.draw.renderer.DocumentPngExporter
 import space.owork.draw.storage.CheckpointInfo
 import space.owork.draw.storage.DocumentSummary
@@ -348,6 +351,42 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
         val layerId = doc.primaryStrokeLayer().id
         val (nextDoc, delta) = commandStack.execute(doc, DocumentCommand.EraseStrokes(layerId, strokeIds))
         applyMutation(nextDoc, delta)
+    }
+
+    fun onBucketFillRequested(
+        worldX: Float,
+        worldY: Float,
+        brush: BrushSpec,
+        visibleWorldBounds: WorldRect?,
+    ) {
+        val docSnapshot = _uiState.value.activeDocument ?: return
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.Default) {
+                BucketFillEngine.floodFill(
+                    document = docSnapshot,
+                    worldX = worldX,
+                    worldY = worldY,
+                    fillBrush = brush,
+                    visibleWorldBounds = visibleWorldBounds,
+                )
+            }
+            when (result) {
+                is BucketFillResult.Success -> {
+                    val latest = _uiState.value.activeDocument ?: return@launch
+                    if (latest.id != docSnapshot.id) return@launch
+                    val layerId = latest.primaryStrokeLayer().id
+                    val (nextDoc, delta) = commandStack.execute(latest, DocumentCommand.AddStroke(layerId, result.stroke))
+                    applyMutation(nextDoc, delta)
+                }
+
+                BucketFillResult.OpenRegion -> {
+                    _uiState.update { it.copy(snackbarMessage = "Area isn't closed — close the gap to fill") }
+                }
+
+                BucketFillResult.AlreadyFilled,
+                BucketFillResult.OutsideCanvas -> Unit
+            }
+        }
     }
 
     fun undo() {

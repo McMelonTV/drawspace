@@ -24,7 +24,42 @@ object StrokeMeshBuilder {
     const val FLOATS_PER_VERTEX = 8
     private const val HALF_PI = 1.5707964f
 
-    fun buildRibbon(stroke: Stroke): FloatArray = buildRibbon(stroke.brush, stroke.points)
+    fun buildRibbon(stroke: Stroke): FloatArray =
+        if (stroke.brush.tool == ToolType.FILL) {
+            buildFillTriangles(stroke)
+        } else {
+            buildRibbon(stroke.brush, stroke.points)
+        }
+
+    /**
+     * Converts a [ToolType.FILL] stroke (pairs of top-left / bottom-right points) into a
+     * `GL_TRIANGLES` vertex array compatible with [DrawspaceGlEngine]'s unified stroke shader.
+     */
+    fun buildFillTriangles(stroke: Stroke): FloatArray {
+        val pts = stroke.points
+        val rectCount = pts.size / 2
+        if (rectCount <= 0) return FloatArray(0)
+        val alpha = stroke.brush.opacity.coerceIn(0.04f, 1f)
+        val out = FloatArray(rectCount * 6 * FLOATS_PER_VERTEX)
+        var c = 0
+        fun emit(x: Float, y: Float) {
+            out[c++] = x; out[c++] = y
+            out[c++] = 0f; out[c++] = 0f
+            out[c++] = 0f; out[c++] = 0f
+            out[c++] = 1000f; out[c++] = alpha
+        }
+        var i = 0
+        while (i + 1 < pts.size) {
+            val l = pts[i].x
+            val t = pts[i].y
+            val r = pts[i + 1].x
+            val b = pts[i + 1].y
+            emit(l, t); emit(r, t); emit(l, b)
+            emit(r, t); emit(r, b); emit(l, b)
+            i += 2
+        }
+        return out
+    }
 
     fun buildRibbon(brush: BrushSpec, rawPoints: List<StrokePoint>): FloatArray {
         if (rawPoints.isEmpty()) return FloatArray(0)

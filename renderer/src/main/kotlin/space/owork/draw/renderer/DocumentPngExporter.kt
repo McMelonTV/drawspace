@@ -81,9 +81,20 @@ object DocumentPngExporter {
         val brush = stroke.brush
         val alphaInt = (brush.opacity * layerOpacity * 255f).roundToInt().coerceIn(0, 255)
         paint.color = (brush.colorArgb and 0x00FFFFFF) or (alphaInt shl 24)
-        paint.strokeCap = if (brush.tool == ToolType.MARKER) Paint.Cap.SQUARE else Paint.Cap.ROUND
 
         val pts = stroke.points
+        if (brush.tool == ToolType.FILL) {
+            paint.style = Paint.Style.FILL
+            var i = 0
+            while (i + 1 < pts.size) {
+                canvas.drawRect(pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y, paint)
+                i += 2
+            }
+            paint.style = Paint.Style.STROKE
+            return
+        }
+
+        paint.strokeCap = if (brush.tool == ToolType.MARKER) Paint.Cap.SQUARE else Paint.Cap.ROUND
         if (pts.size == 1) {
             paint.style = Paint.Style.FILL
             canvas.drawCircle(pts[0].x, pts[0].y, brush.sizeWorldPx * 0.5f, paint)

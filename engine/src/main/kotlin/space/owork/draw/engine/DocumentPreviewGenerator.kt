@@ -133,6 +133,20 @@ object DocumentPreviewGenerator {
         val color = argbToHex(stroke.brush.colorArgb)
         val opacity = stroke.brush.opacity.coerceIn(0f, 1f)
         val pts = stroke.points
+        if (stroke.brush.tool == ToolType.FILL) {
+            sb.append("""      <g fill="$color" fill-opacity="${fmt3(opacity)}">""").append('\n')
+            var i = 0
+            while (i + 1 < pts.size) {
+                val tl = pts[i]
+                val br = pts[i + 1]
+                val w = (br.x - tl.x).coerceAtLeast(0f)
+                val h = (br.y - tl.y).coerceAtLeast(0f)
+                sb.append("""        <rect x="${fmt(tl.x)}" y="${fmt(tl.y)}" width="${fmt(w)}" height="${fmt(h)}"/>""").append('\n')
+                i += 2
+            }
+            sb.append("      </g>\n")
+            return
+        }
         if (pts.size == 1) {
             val p = pts[0]
             val r = (strokeWidthAt(stroke.brush, p) * 0.5f).coerceAtLeast(0.5f)

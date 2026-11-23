@@ -107,6 +107,7 @@ class MainActivity : ComponentActivity() {
                                 onRedo = viewModel::redo,
                                 onStrokeCommitted = viewModel::onStrokeCommitted,
                                 onStrokesErased = viewModel::onStrokesErased,
+                                onBucketFillRequested = viewModel::onBucketFillRequested,
                                 onCameraChanged = viewModel::onCameraChanged,
                                 onSaveSnapshot = viewModel::saveNamedSnapshot,
                                 onRestoreCheckpoint = viewModel::restoreCheckpoint,

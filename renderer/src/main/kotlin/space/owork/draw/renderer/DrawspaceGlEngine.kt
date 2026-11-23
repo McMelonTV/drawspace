@@ -497,7 +497,7 @@ internal class DrawspaceGlEngine {
     private fun drawVbo(vboId: Int, vertexCount: Int, brush: BrushSpec) {
         setColorUniform(uStrokeColor, brush.colorArgb)
         val mode = when (brush.tool) {
-            ToolType.PEN, ToolType.LINE -> 0f
+            ToolType.PEN, ToolType.LINE, ToolType.FILL -> 0f
             ToolType.PENCIL -> 1f
             ToolType.MARKER -> 2f
             ToolType.ERASER -> 0f
@@ -514,7 +514,8 @@ internal class DrawspaceGlEngine {
         GLES30.glVertexAttribPointer(2, 2, GLES30.GL_FLOAT, false, stride, 16)
         GLES30.glEnableVertexAttribArray(3)
         GLES30.glVertexAttribPointer(3, 2, GLES30.GL_FLOAT, false, stride, 24)
-        GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, vertexCount)
+        val drawMode = if (brush.tool == ToolType.FILL) GLES30.GL_TRIANGLES else GLES30.GL_TRIANGLE_STRIP
+        GLES30.glDrawArrays(drawMode, 0, vertexCount)
         GLES30.glDisableVertexAttribArray(0)
         GLES30.glDisableVertexAttribArray(1)
         GLES30.glDisableVertexAttribArray(2)

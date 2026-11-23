@@ -126,6 +126,22 @@ fun DocumentThumbnailCanvas(
                 } else {
                     Color(stroke.brush.colorArgb).copy(alpha = stroke.brush.opacity.coerceIn(0.08f, 1f))
                 }
+                if (stroke.brush.tool == ToolType.FILL) {
+                    var i = 0
+                    while (i + 1 < pts.size) {
+                        val l = originX + pts[i].x * scale
+                        val t = originY + pts[i].y * scale
+                        val r = originX + pts[i + 1].x * scale
+                        val b = originY + pts[i + 1].y * scale
+                        drawRect(
+                            color = strokeColor,
+                            topLeft = Offset(l, t),
+                            size = Size((r - l).coerceAtLeast(0.5f), (b - t).coerceAtLeast(0.5f)),
+                        )
+                        i += 2
+                    }
+                    continue
+                }
                 val strokeW = (stroke.brush.sizeWorldPx * scale * if (isHighlighted) 1.35f else 1f).coerceIn(1.1f, 16f)
 
                 if (pts.size == 1) {

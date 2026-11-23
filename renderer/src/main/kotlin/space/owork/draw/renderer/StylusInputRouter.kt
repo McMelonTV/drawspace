@@ -46,6 +46,7 @@ internal class StylusInputRouter(
         fun onActiveStrokeCanceled()
         fun onEraseSample(worldX: Float, worldY: Float, eraserRadiusWorld: Float)
         fun onEraseFinished()
+        fun onBucketFillTap(worldX: Float, worldY: Float, brush: BrushSpec)
         fun onCameraGesture(newCamera: ViewportCamera)
     }
 
@@ -110,6 +111,7 @@ internal class StylusInputRouter(
                 val idx = findActivePointerIndex(event)
                 if (idx < 0) return true
                 val brush = activeBrush
+                if (brush?.tool == ToolType.FILL) return true
                 if (brush?.tool == ToolType.LINE) {
                     val start = activePoints.firstOrNull() ?: return true
                     val end = snapIfEnabled(start, extractSample(event, idx))
@@ -181,6 +183,9 @@ internal class StylusInputRouter(
 
         val sample = extractSample(event, pointerIndex)
         activePoints.add(sample)
+        if (effectiveBrush.tool == ToolType.FILL) {
+            return
+        }
         if (isErasing) {
             val radius = effectiveBrush.sizeWorldPx * 0.55f / callbacks.currentCamera().zoom.coerceAtLeast(0.25f)
             callbacks.onEraseSample(sample.x, sample.y, radius)
@@ -191,6 +196,12 @@ internal class StylusInputRouter(
 
     private fun finishActiveStroke(event: MotionEvent, pointerIndex: Int) {
         val brush = activeBrush
+        if (brush?.tool == ToolType.FILL) {
+            val tap = extractSample(event, pointerIndex)
+            callbacks.onBucketFillTap(tap.x, tap.y, brush)
+            resetActiveStroke()
+            return
+        }
         if (brush?.tool == ToolType.LINE) {
             val start = activePoints.firstOrNull()
             if (start != null) {

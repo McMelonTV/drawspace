@@ -17,6 +17,7 @@ import space.owork.draw.engine.Stroke
 import space.owork.draw.engine.StrokePoint
 import space.owork.draw.engine.StrokeSmoothingLevel
 import space.owork.draw.engine.ViewportCamera
+import space.owork.draw.engine.WorldRect
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -33,6 +34,7 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
     interface Listener {
         fun onStrokeCommitted(stroke: Stroke)
         fun onStrokesErased(strokeIds: List<String>)
+        fun onBucketFillRequested(worldX: Float, worldY: Float, brush: BrushSpec, visibleWorldBounds: WorldRect?)
         fun onCameraChanged(camera: ViewportCamera)
     }
 
@@ -170,6 +172,15 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
                     erasedInGesture.clear()
                     listener?.onStrokesErased(batch)
                 }
+            }
+
+            override fun onBucketFillTap(worldX: Float, worldY: Float, brush: BrushSpec) {
+                val visible = if (width > 0 && height > 0) {
+                    cameraRef.get().visibleWorldBounds(width.toFloat(), height.toFloat())
+                } else {
+                    null
+                }
+                listener?.onBucketFillRequested(worldX, worldY, brush, visible)
             }
 
             override fun onCameraGesture(newCamera: ViewportCamera) {

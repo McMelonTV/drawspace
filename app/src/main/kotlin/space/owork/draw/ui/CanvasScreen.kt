@@ -80,12 +80,14 @@ import space.owork.draw.AppUiState
 import space.owork.draw.R
 import space.owork.draw.engine.AppTheme
 import space.owork.draw.engine.BackgroundPattern
+import space.owork.draw.engine.BrushSpec
 import space.owork.draw.engine.CanvasBackground
 import space.owork.draw.engine.CanvasLockMode
 import space.owork.draw.engine.CanvasMode
 import space.owork.draw.engine.Stroke
 import space.owork.draw.engine.ToolType
 import space.owork.draw.engine.ViewportCamera
+import space.owork.draw.engine.WorldRect
 import space.owork.draw.renderer.DrawspaceSurfaceView
 import space.owork.draw.storage.CheckpointInfo
 import space.owork.draw.ui.theme.LocalHudColors
@@ -116,6 +118,7 @@ fun CanvasScreen(
     onRedo: () -> Unit,
     onStrokeCommitted: (Stroke) -> Unit,
     onStrokesErased: (List<String>) -> Unit,
+    onBucketFillRequested: (Float, Float, BrushSpec, WorldRect?) -> Unit,
     onCameraChanged: (ViewportCamera) -> Unit,
     onSaveSnapshot: (String) -> Unit,
     onRestoreCheckpoint: (CheckpointInfo) -> Unit,
@@ -142,6 +145,13 @@ fun CanvasScreen(
                         object : DrawspaceSurfaceView.Listener {
                             override fun onStrokeCommitted(stroke: Stroke) = onStrokeCommitted(stroke)
                             override fun onStrokesErased(strokeIds: List<String>) = onStrokesErased(strokeIds)
+                            override fun onBucketFillRequested(
+                                worldX: Float,
+                                worldY: Float,
+                                brush: BrushSpec,
+                                visibleWorldBounds: WorldRect?,
+                            ) = onBucketFillRequested(worldX, worldY, brush, visibleWorldBounds)
+
                             override fun onCameraChanged(camera: ViewportCamera) = onCameraChanged(camera)
                         },
                     )
@@ -340,6 +350,12 @@ fun CanvasScreen(
                     onClick = { onSelectTool(ToolType.LINE) },
                 )
                 ToolRailButton(
+                    painter = painterResource(R.drawable.ic_tool_bucket),
+                    label = "Fill",
+                    selected = state.activeTool == ToolType.FILL,
+                    onClick = { onSelectTool(ToolType.FILL) },
+                )
+                ToolRailButton(
                     painter = painterResource(R.drawable.ic_tool_eraser),
                     label = "Eraser",
                     selected = state.activeTool == ToolType.ERASER,
@@ -443,23 +459,25 @@ fun CanvasScreen(
                     )
                 }
 
-                // Size slider
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Text(
-                        text = "${state.activeBrush.sizeWorldPx.roundToInt()}px",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.width(34.dp),
-                    )
-                    Slider(
-                        value = state.activeBrush.sizeWorldPx,
-                        onValueChange = onSizeChange,
-                        valueRange = 1f..64f,
-                        modifier = Modifier.width(if (state.activeTool == ToolType.ERASER) 160.dp else 110.dp),
-                    )
+                // Size slider (hidden for Bucket Fill)
+                if (state.activeTool != ToolType.FILL) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = "${state.activeBrush.sizeWorldPx.roundToInt()}px",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.width(34.dp),
+                        )
+                        Slider(
+                            value = state.activeBrush.sizeWorldPx,
+                            onValueChange = onSizeChange,
+                            valueRange = 1f..64f,
+                            modifier = Modifier.width(if (state.activeTool == ToolType.ERASER) 160.dp else 110.dp),
+                        )
+                    }
                 }
 
                 if (state.activeTool != ToolType.ERASER) {

@@ -142,4 +142,35 @@ class EngineCoreTest {
         // Sharp corner at (50, 0) was rounded inward
         assertTrue(refined.none { it.x == 50f && it.y == 0f })
     }
+
+    @Test
+    fun `bucket fill fills enclosed square and rejects open infinite background`() {
+        var doc = Document.createNew("Fill Test", CanvasMode.Infinite, nowMs = 6000L)
+        val layerId = doc.primaryStrokeLayer().id
+        val pen = BrushSpec.defaultFor(ToolType.PEN, 0xFF181A1F.toInt())
+        val square = Stroke(
+            brush = pen,
+            points = listOf(
+                StrokePoint(0f, 0f),
+                StrokePoint(200f, 0f),
+                StrokePoint(200f, 200f),
+                StrokePoint(0f, 200f),
+                StrokePoint(0f, 0f),
+            ),
+        )
+        doc = DocumentCommand.AddStroke(layerId, square).apply(doc, 6001L).first
+
+        // Inside closed square -> succeeds
+        val fillBrush = BrushSpec.defaultFor(ToolType.FILL, 0xFF2F66D0.toInt())
+        val insideRes = BucketFillEngine.floodFill(doc, 100f, 100f, fillBrush)
+        assertTrue("Expected Success, got $insideRes", insideRes is BucketFillResult.Success)
+        val fillStroke = (insideRes as BucketFillResult.Success).stroke
+        assertEquals(ToolType.FILL, fillStroke.brush.tool)
+        assertTrue(fillStroke.hitTest(100f, 100f, 2f))
+        assertFalse(fillStroke.hitTest(250f, 250f, 2f))
+
+        // Outside square on infinite canvas -> rejected as open region
+        val outsideRes = BucketFillEngine.floodFill(doc, 250f, 250f, fillBrush)
+        assertTrue("Expected OpenRegion, got $outsideRes", outsideRes is BucketFillResult.OpenRegion)
+    }
 }
