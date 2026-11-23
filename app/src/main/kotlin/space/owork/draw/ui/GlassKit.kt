@@ -172,11 +172,11 @@ fun GlassSectionLabel(
 ) {
     val p = LocalGlass.current
     Text(
-        text = text.uppercase(),
+        text = text,
         color = p.secondary,
-        fontSize = 11.sp,
+        fontSize = 12.5.sp,
         fontWeight = FontWeight.SemiBold,
-        letterSpacing = 1.25.sp,
+        letterSpacing = (-0.15).sp,
         modifier = modifier,
     )
 }

@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -137,14 +136,6 @@ fun SettingsScreen(
                             letterSpacing = (-0.3).sp,
                             textAlign = TextAlign.Center,
                         )
-                        Text(
-                            text = "GLES 3.0 ink rendering, stylus defaults, and canvas presets.",
-                            color = p.secondary,
-                            fontSize = 13.sp,
-                            lineHeight = 19.sp,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.widthIn(max = 250.dp),
-                        )
                     }
                 }
             }
@@ -159,12 +150,6 @@ fun SettingsScreen(
             ) {
                 GlassSettingsCard(title = "Appearance") {
                     Text("App Theme", color = p.text, fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        "Styles app chrome and serves as the default background theme for sketches set to Follow App.",
-                        color = p.secondary,
-                        fontSize = 12.5.sp,
-                        lineHeight = 18.sp,
-                    )
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
