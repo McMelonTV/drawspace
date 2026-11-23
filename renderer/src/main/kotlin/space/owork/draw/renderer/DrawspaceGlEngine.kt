@@ -497,7 +497,7 @@ internal class DrawspaceGlEngine {
     private fun drawVbo(vboId: Int, vertexCount: Int, brush: BrushSpec) {
         setColorUniform(uStrokeColor, brush.colorArgb)
         val mode = when (brush.tool) {
-            ToolType.PEN -> 0f
+            ToolType.PEN, ToolType.LINE -> 0f
             ToolType.PENCIL -> 1f
             ToolType.MARKER -> 2f
             ToolType.ERASER -> 0f

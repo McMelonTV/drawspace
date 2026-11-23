@@ -109,6 +109,7 @@ fun CanvasScreen(
     onSizeChange: (Float) -> Unit,
     onOpacityChange: (Float) -> Unit,
     onToggleFingerDrawing: () -> Unit,
+    onToggleSnapLineAngles: () -> Unit,
     onCycleLockMode: () -> Unit,
     onUpdateBackground: ((CanvasBackground) -> CanvasBackground) -> Unit,
     onUndo: () -> Unit,
@@ -148,6 +149,7 @@ fun CanvasScreen(
                     setAntiAliasing(state.settings.antiAliasing)
                     setStrokeSmoothing(state.settings.strokeSmoothing)
                     setRoundTurnsAndEnds(state.settings.roundTurnsAndEnds)
+                    setSnapLineAngles(state.snapLineAngles)
                     setDocument(doc)
                     setBrush(state.activeBrush)
                     setAllowFingerDrawing(state.allowFingerDrawing)
@@ -159,6 +161,7 @@ fun CanvasScreen(
                 view.setAntiAliasing(state.settings.antiAliasing)
                 view.setStrokeSmoothing(state.settings.strokeSmoothing)
                 view.setRoundTurnsAndEnds(state.settings.roundTurnsAndEnds)
+                view.setSnapLineAngles(state.snapLineAngles)
                 view.setDocument(doc)
                 view.setBrush(state.activeBrush)
                 view.setAllowFingerDrawing(state.allowFingerDrawing)
@@ -331,6 +334,12 @@ fun CanvasScreen(
                     onClick = { onSelectTool(ToolType.MARKER) },
                 )
                 ToolRailButton(
+                    painter = painterResource(R.drawable.ic_tool_line),
+                    label = "Line",
+                    selected = state.activeTool == ToolType.LINE,
+                    onClick = { onSelectTool(ToolType.LINE) },
+                )
+                ToolRailButton(
                     painter = painterResource(R.drawable.ic_tool_eraser),
                     label = "Eraser",
                     selected = state.activeTool == ToolType.ERASER,
@@ -423,6 +432,14 @@ fun CanvasScreen(
                         text = "Eraser",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+
+                if (state.activeTool == ToolType.LINE) {
+                    FilterChip(
+                        selected = state.snapLineAngles,
+                        onClick = onToggleSnapLineAngles,
+                        label = { Text("15° Snap") },
                     )
                 }
 

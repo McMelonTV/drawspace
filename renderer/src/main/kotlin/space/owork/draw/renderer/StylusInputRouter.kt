@@ -13,8 +13,12 @@ import space.owork.draw.engine.StrokeSmoothingLevel
 import space.owork.draw.engine.ToolType
 import space.owork.draw.engine.Ulid
 import space.owork.draw.engine.ViewportCamera
+import kotlin.math.PI
 import kotlin.math.atan2
+import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.round
+import kotlin.math.sin
 
 /**
  * Native tablet stylus & multi-touch gesture router.
@@ -35,6 +39,7 @@ internal class StylusInputRouter(
         fun currentBrush(): BrushSpec
         fun currentSmoothing(): StrokeSmoothingLevel
         fun roundTurnsAndEnds(): Boolean
+        fun snapLineAngles(): Boolean
         fun allowFingerDrawing(): Boolean
         fun onActiveStrokeUpdated(brush: BrushSpec, points: List<StrokePoint>, predictedTip: StrokePoint?)
         fun onActiveStrokeCommitted(stroke: Stroke)
@@ -104,6 +109,14 @@ internal class StylusInputRouter(
             MotionEvent.ACTION_MOVE -> {
                 val idx = findActivePointerIndex(event)
                 if (idx < 0) return true
+                val brush = activeBrush
+                if (brush?.tool == ToolType.LINE) {
+                    val start = activePoints.firstOrNull() ?: return true
+                    val end = snapIfEnabled(start, extractSample(event, idx))
+                    if (activePoints.size == 1) activePoints.add(end) else activePoints[1] = end
+                    callbacks.onActiveStrokeUpdated(brush, activePoints, null)
+                    return true
+                }
                 appendHistoricalAndCurrent(event, idx)
                 if (isErasing) {
                     val last = activePoints.lastOrNull()
@@ -112,7 +125,7 @@ internal class StylusInputRouter(
                         callbacks.onEraseSample(last.x, last.y, radius)
                     }
                 } else {
-                    val brush = activeBrush ?: return true
+                    if (brush == null) return true
                     val predicted = predictTip(event, idx)
                     callbacks.onActiveStrokeUpdated(brush, activePoints, predicted)
                 }
@@ -177,11 +190,21 @@ internal class StylusInputRouter(
     }
 
     private fun finishActiveStroke(event: MotionEvent, pointerIndex: Int) {
+        val brush = activeBrush
+        if (brush?.tool == ToolType.LINE) {
+            val start = activePoints.firstOrNull()
+            if (start != null) {
+                val end = snapIfEnabled(start, extractSample(event, pointerIndex))
+                val pts = if (hypot(end.x - start.x, end.y - start.y) < 0.5f) listOf(start) else listOf(start, end)
+                callbacks.onActiveStrokeCommitted(Stroke(id = Ulid.next(), brush = brush, points = pts))
+            }
+            resetActiveStroke()
+            return
+        }
         appendHistoricalAndCurrent(event, pointerIndex)
         if (isErasing) {
             callbacks.onEraseFinished()
         } else {
-            val brush = activeBrush
             if (brush != null && activePoints.isNotEmpty()) {
                 val refined = StrokeSmoother.refine(
                     rawPoints = activePoints,
@@ -197,6 +220,20 @@ internal class StylusInputRouter(
             }
         }
         resetActiveStroke()
+    }
+
+    private fun snapIfEnabled(start: StrokePoint, rawEnd: StrokePoint): StrokePoint {
+        if (!callbacks.snapLineAngles()) return rawEnd
+        val dx = rawEnd.x - start.x
+        val dy = rawEnd.y - start.y
+        val len = hypot(dx, dy)
+        if (len < 1f) return rawEnd
+        val stepRad = (PI / 12.0).toFloat() // 15 deg increments (covers 0, 30, 45, 60, 90 for square & isometric!)
+        val snappedAngle = round(atan2(dy, dx) / stepRad) * stepRad
+        return rawEnd.copy(
+            x = start.x + cos(snappedAngle) * len,
+            y = start.y + sin(snappedAngle) * len,
+        )
     }
 
     private fun cancelActiveStroke() {

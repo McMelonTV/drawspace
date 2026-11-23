@@ -51,6 +51,7 @@ data class AppUiState(
     val toolBrushes: Map<ToolType, BrushSpec> = defaultToolBrushes(),
     val palette: ColorPalette = ColorPalette(),
     val allowFingerDrawing: Boolean = true,
+    val snapLineAngles: Boolean = false,
     val lockMode: CanvasLockMode = CanvasLockMode.UNLOCKED,
     val canUndo: Boolean = false,
     val canRedo: Boolean = false,
@@ -304,6 +305,10 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun toggleFingerDrawing() {
         _uiState.update { it.copy(allowFingerDrawing = !it.allowFingerDrawing) }
+    }
+
+    fun toggleSnapLineAngles() {
+        _uiState.update { it.copy(snapLineAngles = !it.snapLineAngles) }
     }
 
     fun cycleLockMode() {

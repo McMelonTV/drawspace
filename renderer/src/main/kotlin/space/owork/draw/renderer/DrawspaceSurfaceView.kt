@@ -48,6 +48,8 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
     @Volatile
     private var roundTurnsAndEndsEnabled = true
     @Volatile
+    private var snapLineAnglesEnabled = false
+    @Volatile
     private var allowFingerDraw = true
     @Volatile
     private var listener: Listener? = null
@@ -114,6 +116,7 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
             override fun currentBrush(): BrushSpec = brushRef.get()
             override fun currentSmoothing(): StrokeSmoothingLevel = smoothingRef.get()
             override fun roundTurnsAndEnds(): Boolean = roundTurnsAndEndsEnabled
+            override fun snapLineAngles(): Boolean = snapLineAnglesEnabled
             override fun allowFingerDrawing(): Boolean = allowFingerDraw
 
             override fun onActiveStrokeUpdated(
@@ -227,6 +230,10 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
 
     fun setRoundTurnsAndEnds(enabled: Boolean) {
         roundTurnsAndEndsEnabled = enabled
+    }
+
+    fun setSnapLineAngles(enabled: Boolean) {
+        snapLineAnglesEnabled = enabled
     }
 
     fun setAllowFingerDrawing(enabled: Boolean) {

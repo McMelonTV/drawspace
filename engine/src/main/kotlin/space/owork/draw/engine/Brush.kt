@@ -14,6 +14,9 @@ enum class ToolType {
     @SerialName("marker")
     MARKER,
 
+    @SerialName("line")
+    LINE,
+
     @SerialName("eraser")
     ERASER,
 }
@@ -66,6 +69,16 @@ data class BrushSpec(
                 pressureSizeSensitivity = 0.2f,
                 pressureOpacitySensitivity = 0.15f,
                 tiltSensitivity = 0.5f,
+            )
+
+            ToolType.LINE -> BrushSpec(
+                tool = ToolType.LINE,
+                colorArgb = colorArgb,
+                sizeWorldPx = 5.5f,
+                opacity = 1.0f,
+                pressureSizeSensitivity = 0.0f,
+                pressureOpacitySensitivity = 0.0f,
+                tiltSensitivity = 0.0f,
             )
 
             ToolType.ERASER -> BrushSpec(

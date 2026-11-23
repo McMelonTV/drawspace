@@ -291,6 +291,17 @@ internal class IncrementalLiveMesh {
             }
             this.brush = brush
 
+            if (brush.tool == ToolType.LINE && points.size == 2) {
+                val verts = StrokeMeshBuilder.buildRibbon(brush, points)
+                ensureCapacity(verts.size)
+                verts.copyInto(data, 0)
+                committedFloats = 0
+                totalFloats = verts.size
+                dirtyFromFloat = 0
+                meshedPointCount = 2
+                return
+            }
+
             // Start of a brand-new stroke
             if (points.size < meshedPointCount || meshedPointCount == 0) {
                 generation++
