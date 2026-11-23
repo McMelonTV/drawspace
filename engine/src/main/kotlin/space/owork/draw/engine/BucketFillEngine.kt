@@ -111,11 +111,13 @@ object BucketFillEngine {
             val tag = (stroke.brush.colorArgb and 0x00FFFFFF) or FILL_TAG_BIT
             rasterizeFillStroke(stroke, workRect, cellSize, grid, gridW, gridH, tag)
         }
+        var maxStrokeRadiusCells = 1f
         for (stroke in strokes) {
             if (stroke.brush.tool == ToolType.ERASER || stroke.brush.tool == ToolType.FILL || stroke.points.isEmpty()) continue
             if (!stroke.bounds.intersects(workRect)) continue
             val tag = (stroke.brush.colorArgb and 0x00FFFFFF) or LINE_BARRIER_BIT
-            rasterizeLineStroke(stroke, workRect, cellSize, grid, gridW, gridH, tag)
+            val r = rasterizeLineStroke(stroke, workRect, cellSize, grid, gridW, gridH, tag)
+            if (r > maxStrokeRadiusCells) maxStrokeRadiusCells = r
         }
 
         val targetTag = grid[seedY * gridW + seedX]
@@ -194,12 +196,11 @@ object BucketFillEngine {
             return BucketFillResult.OpenRegion
         }
 
-        // Tuck strictly into surrounding LINE_BARRIER pixels:
-        // Pass 1 (8-connected): tucks 1 cell into barrier edge (safe even on 1px hairlines).
-        // Pass 2 (interior barrier only): tucks deeper toward the centerline of thicker strokes
-        // without ever touching an unfilled cell on the far side of the stroke.
-        val tucked1 = dilateIntoLineBarriers(filled, grid, gridW, gridH, interiorBarrierOnly = false)
-        val tucked = dilateIntoLineBarriers(tucked1, grid, gridW, gridH, interiorBarrierOnly = true)
+        // Tuck into surrounding LINE_BARRIER pixels via depth-bounded BFS through safe interior
+        // barrier cells (cells that never border an unfilled non-barrier pixel on the far side).
+        // This eliminates both diagonal sawtooth specks and acute-corner wedges on thick strokes.
+        val maxTuckDepth = ceil(maxStrokeRadiusCells * 1.8f).toInt().coerceIn(2, 28)
+        val tucked = tuckIntoLineBarriers(filled, grid, gridW, gridH, maxTuckDepth)
 
         // Convert filled boolean mask into vertically merged world-space rectangles.
         val rects = extractMergedRects(tucked, gridW, gridH, workRect, cellSize)
@@ -228,43 +229,101 @@ object BucketFillEngine {
         return BucketFillResult.Success(stroke)
     }
 
-    private fun dilateIntoLineBarriers(
-        filled: BooleanArray,
+    private fun tuckIntoLineBarriers(
+        origFilled: BooleanArray,
         grid: IntArray,
         gridW: Int,
         gridH: Int,
-        interiorBarrierOnly: Boolean,
+        maxDepth: Int,
     ): BooleanArray {
-        val out = filled.copyOf()
+        val total = gridW * gridH
+        val out = origFilled.copyOf()
+        val depth = IntArray(total) { -1 }
+
+        fun isSafeInteriorBarrier(x: Int, y: Int): Boolean {
+            val minNy = (y - 1).coerceAtLeast(0)
+            val maxNy = (y + 1).coerceAtMost(gridH - 1)
+            val minNx = (x - 1).coerceAtLeast(0)
+            val maxNx = (x + 1).coerceAtMost(gridW - 1)
+            for (ny in minNy..maxNy) {
+                val nRow = ny * gridW
+                for (nx in minNx..maxNx) {
+                    val nIdx = nRow + nx
+                    if (!origFilled[nIdx] && (grid[nIdx] and LINE_BARRIER_BIT) == 0) {
+                        return false
+                    }
+                }
+            }
+            return true
+        }
+
+        // Queue indices of barrier cells we can keep expanding from
+        var queue = IntArray(4096)
+        var head = 0
+        var tail = 0
+        fun enqueue(idx: Int) {
+            if (tail >= queue.size) queue = queue.copyOf(queue.size * 2)
+            queue[tail++] = idx
+        }
+
+        // Seed depth-1 barrier cells directly adjacent (8-connected) to the filled region
         for (y in 0 until gridH) {
             val rowOff = y * gridW
             for (x in 0 until gridW) {
                 val idx = rowOff + x
-                if (filled[idx]) continue
-                if ((grid[idx] and LINE_BARRIER_BIT) == 0) continue
-
+                if (origFilled[idx] || (grid[idx] and LINE_BARRIER_BIT) == 0) continue
                 var touchesFill = false
-                var touchesOutsideNonBarrier = false
                 val minNy = (y - 1).coerceAtLeast(0)
                 val maxNy = (y + 1).coerceAtMost(gridH - 1)
                 val minNx = (x - 1).coerceAtLeast(0)
                 val maxNx = (x + 1).coerceAtMost(gridW - 1)
-                for (ny in minNy..maxNy) {
+                outer@ for (ny in minNy..maxNy) {
                     val nRow = ny * gridW
                     for (nx in minNx..maxNx) {
-                        val nIdx = nRow + nx
-                        if (filled[nIdx]) {
+                        if (origFilled[nRow + nx]) {
                             touchesFill = true
-                        } else if (interiorBarrierOnly && (grid[nIdx] and LINE_BARRIER_BIT) == 0) {
-                            touchesOutsideNonBarrier = true
+                            break@outer
                         }
                     }
                 }
-                if (touchesFill && !touchesOutsideNonBarrier) {
+                if (touchesFill) {
                     out[idx] = true
+                    depth[idx] = 1
+                    // Only expand further if this cell doesn't already border the outside of the stroke
+                    if (maxDepth > 1 && isSafeInteriorBarrier(x, y)) {
+                        enqueue(idx)
+                    }
                 }
             }
         }
+
+        // BFS through safe interior barrier pixels up to maxDepth (fills acute corner wedges cleanly)
+        while (head < tail) {
+            val idx = queue[head++]
+            val nextD = depth[idx] + 1
+            if (nextD > maxDepth) continue
+            val x = idx % gridW
+            val y = idx / gridW
+            val minNy = (y - 1).coerceAtLeast(0)
+            val maxNy = (y + 1).coerceAtMost(gridH - 1)
+            val minNx = (x - 1).coerceAtLeast(0)
+            val maxNx = (x + 1).coerceAtMost(gridW - 1)
+            for (ny in minNy..maxNy) {
+                val nRow = ny * gridW
+                for (nx in minNx..maxNx) {
+                    val nIdx = nRow + nx
+                    if (out[nIdx] || (grid[nIdx] and LINE_BARRIER_BIT) == 0) continue
+                    if (isSafeInteriorBarrier(nx, ny)) {
+                        out[nIdx] = true
+                        depth[nIdx] = nextD
+                        if (nextD < maxDepth) {
+                            enqueue(nIdx)
+                        }
+                    }
+                }
+            }
+        }
+
         return out
     }
 
@@ -352,13 +411,14 @@ object BucketFillEngine {
         gridW: Int,
         gridH: Int,
         tag: Int,
-    ) {
+    ): Float {
         val pts = stroke.points
         val brush = stroke.brush
         // Rasterize slightly narrower than the rendered stroke (0.34x diameter) so fills tuck well
         // underneath the anti-aliased edge, and use 4-connected supercover stepping for hairlines
         // so thin strokes stay 100% watertight without bloating into giant multi-pixel barriers.
         val baseRadiusCells = brush.sizeWorldPx * 0.34f / cellSize
+        var maxR = baseRadiusCells
 
         fun stampDisc(gx: Float, gy: Float, rCells: Float) {
             // Grid cell (x, y) covers [x, x+1) x [y, y+1) with center at (x + 0.5, y + 0.5),
@@ -390,7 +450,7 @@ object BucketFillEngine {
 
         if (pts.size == 1) {
             stampDisc((pts[0].x - workRect.left) / cellSize, (pts[0].y - workRect.top) / cellSize, baseRadiusCells)
-            return
+            return maxR
         }
 
         for (i in 0 until pts.lastIndex) {
@@ -404,6 +464,7 @@ object BucketFillEngine {
             val avgP = (a.pressure + b.pressure) * 0.5f
             val pFactor = (1f - brush.pressureSizeSensitivity) + brush.pressureSizeSensitivity * avgP.coerceIn(0.1f, 1.3f)
             val rCells = brush.sizeWorldPx * pFactor * 0.34f / cellSize
+            if (rCells > maxR) maxR = rCells
             val stepLen = if (rCells <= 1.25f) 0.35f else max(rCells * 0.45f, 0.45f)
             val steps = ceil(dist / stepLen).toInt().coerceAtLeast(1)
 
@@ -432,6 +493,7 @@ object BucketFillEngine {
                 prevCy = cy
             }
         }
+        return maxR
     }
 
     private fun intersectRect(a: WorldRect, b: WorldRect): WorldRect? {
