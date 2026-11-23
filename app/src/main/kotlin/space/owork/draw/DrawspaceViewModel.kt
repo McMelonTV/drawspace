@@ -397,7 +397,17 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
                 }
 
                 BucketFillResult.OpenRegion -> {
-                    _uiState.update { it.copy(snackbarMessage = "Area isn't closed — close the gap to fill") }
+                    // On an infinite canvas, tapping an open background fills the entire canvas background (undoable!).
+                    val latest = _uiState.value.activeDocument ?: return@launch
+                    if (latest.id != docSnapshot.id) return@launch
+                    val prevPaper = latest.meta.background.customPaperColorArgb
+                    val cmd = DocumentCommand.SetPaperColor(
+                        previousCustomPaperArgb = prevPaper,
+                        newCustomPaperArgb = brush.colorArgb,
+                    )
+                    val (nextDoc, delta) = commandStack.execute(latest, cmd)
+                    hasDirtyBackground = true
+                    applyMutation(nextDoc, delta)
                 }
 
                 BucketFillResult.AlreadyFilled,

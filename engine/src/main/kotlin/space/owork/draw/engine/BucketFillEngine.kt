@@ -397,7 +397,7 @@ object BucketFillEngine {
             val avgP = (a.pressure + b.pressure) * 0.5f
             val pFactor = (1f - brush.pressureSizeSensitivity) + brush.pressureSizeSensitivity * avgP.coerceIn(0.1f, 1.3f)
             val rCells = brush.sizeWorldPx * pFactor * 0.34f / cellSize
-            val stepLen = if (rCells <= 0.65f) 0.4f else max(rCells * 0.45f, 0.45f)
+            val stepLen = if (rCells <= 1.25f) 0.35f else max(rCells * 0.45f, 0.45f)
             val steps = ceil(dist / stepLen).toInt().coerceAtLeast(1)
 
             var prevCx = ax.roundToInt()
@@ -408,13 +408,19 @@ object BucketFillEngine {
                 val gy = ay + (by - ay) * t
                 val cx = gx.roundToInt()
                 val cy = gy.roundToInt()
-                // Supercover orthogonal bridge when a hairline steps diagonally so 4-connected BFS never leaks
-                if (rCells <= 0.65f && cx != prevCx && cy != prevCy) {
+                // Always bridge diagonal pixel steps so 4-connected flood-fill can never leak
+                // through thin or medium diagonal strokes at any zoom level.
+                if (cx != prevCx && cy != prevCy) {
                     if (prevCx in 0 until gridW && cy in 0 until gridH) {
                         grid[cy * gridW + prevCx] = tag
                     }
                 }
-                stampDisc(gx, gy, rCells)
+                if (cx in 0 until gridW && cy in 0 until gridH) {
+                    grid[cy * gridW + cx] = tag
+                }
+                if (rCells > 0.65f) {
+                    stampDisc(gx, gy, rCells)
+                }
                 prevCx = cx
                 prevCy = cy
             }

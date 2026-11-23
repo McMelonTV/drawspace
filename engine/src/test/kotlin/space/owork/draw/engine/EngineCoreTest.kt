@@ -169,9 +169,29 @@ class EngineCoreTest {
         assertTrue(fillStroke.hitTest(100f, 100f, 2f))
         assertFalse(fillStroke.hitTest(250f, 250f, 2f))
 
-        // Outside square on infinite canvas -> rejected as open region
+        // Outside square on infinite canvas -> returns OpenRegion (caller fills infinite canvas bg)
         val outsideRes = BucketFillEngine.floodFill(doc, 250f, 250f, fillBrush)
         assertTrue("Expected OpenRegion, got $outsideRes", outsideRes is BucketFillResult.OpenRegion)
+    }
+
+    @Test
+    fun `bucket fill stays watertight on 3-line diagonal triangle at 150 percent zoom`() {
+        var doc = Document.createNew("Triangle Fill", CanvasMode.Infinite, nowMs = 7000L)
+        val layerId = doc.primaryStrokeLayer().id
+        val lineBrush = BrushSpec.defaultFor(ToolType.LINE, 0xFF181A1F.toInt()) // 5.5px
+        val pA = StrokePoint(-480f, 0f)
+        val pB = StrokePoint(624f, -288f)
+        val pC = StrokePoint(336f, 240f)
+        for ((s, e) in listOf(pA to pB, pB to pC, pC to pA)) {
+            doc = DocumentCommand.AddStroke(layerId, Stroke(brush = lineBrush, points = listOf(s, e))).apply(doc).first
+        }
+        val visibleViewport = WorldRect(-850f, -530f, 850f, 530f) // ~1700 world px (150% zoom on 2560px)
+        val fillBrush = BrushSpec.defaultFor(ToolType.FILL, 0xFF2F66D0.toInt())
+        val res = BucketFillEngine.floodFill(doc, 150f, 0f, fillBrush, visibleWorldBounds = visibleViewport)
+        assertTrue("Expected Success inside diagonal triangle, got $res", res is BucketFillResult.Success)
+        val filled = (res as BucketFillResult.Success).stroke
+        assertTrue(filled.hitTest(150f, 0f, 1f))
+        assertFalse(filled.hitTest(-600f, -300f, 1f))
     }
 
     @Test

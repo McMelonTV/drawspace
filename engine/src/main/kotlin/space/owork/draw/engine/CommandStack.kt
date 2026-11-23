@@ -46,6 +46,14 @@ sealed interface PersistedCommand {
         override val layerId: String,
         val strokeIds: List<String>,
     ) : PersistedCommand
+
+    @Serializable
+    @SerialName("set_paper_color")
+    data class SetPaperColorRef(
+        override val layerId: String = "",
+        val previousCustomPaperArgb: Int?,
+        val newCustomPaperArgb: Int?,
+    ) : PersistedCommand
 }
 
 @Serializable
@@ -137,10 +145,51 @@ sealed interface DocumentCommand {
             PersistedCommand.EraseStrokesRef(layerId = layerId, strokeIds = strokeIds)
     }
 
+    data class SetPaperColor(
+        val previousCustomPaperArgb: Int?,
+        val newCustomPaperArgb: Int?,
+        override val layerId: String = "",
+    ) : DocumentCommand {
+        override fun apply(document: Document, nowMs: Long): Pair<Document, DocumentDelta> {
+            val nextBg = document.meta.background.copy(customPaperColorArgb = newCustomPaperArgb)
+            val next = document.copy(
+                meta = document.meta.copy(
+                    background = nextBg,
+                    backgroundArgb = newCustomPaperArgb ?: document.meta.backgroundArgb,
+                    updatedAtMs = nowMs,
+                ),
+            )
+            return next to DocumentDelta(documentId = document.id, layerId = layerId, timestampMs = nowMs)
+        }
+
+        override fun revert(document: Document, nowMs: Long): Pair<Document, DocumentDelta> {
+            val nextBg = document.meta.background.copy(customPaperColorArgb = previousCustomPaperArgb)
+            val next = document.copy(
+                meta = document.meta.copy(
+                    background = nextBg,
+                    backgroundArgb = previousCustomPaperArgb ?: document.meta.backgroundArgb,
+                    updatedAtMs = nowMs,
+                ),
+            )
+            return next to DocumentDelta(documentId = document.id, layerId = layerId, timestampMs = nowMs)
+        }
+
+        override fun toPersisted(): PersistedCommand = PersistedCommand.SetPaperColorRef(
+            layerId = layerId,
+            previousCustomPaperArgb = previousCustomPaperArgb,
+            newCustomPaperArgb = newCustomPaperArgb,
+        )
+    }
+
     companion object {
         fun fromPersisted(cmd: PersistedCommand): DocumentCommand = when (cmd) {
             is PersistedCommand.AddStrokeRef -> AddStroke(layerId = cmd.layerId, stroke = null, strokeId = cmd.strokeId)
             is PersistedCommand.EraseStrokesRef -> EraseStrokes(layerId = cmd.layerId, strokeIds = cmd.strokeIds)
+            is PersistedCommand.SetPaperColorRef -> SetPaperColor(
+                previousCustomPaperArgb = cmd.previousCustomPaperArgb,
+                newCustomPaperArgb = cmd.newCustomPaperArgb,
+                layerId = cmd.layerId,
+            )
         }
     }
 }
