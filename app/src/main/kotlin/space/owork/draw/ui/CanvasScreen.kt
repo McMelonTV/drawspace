@@ -558,7 +558,7 @@ private fun FloatingPill(
         shape = RoundedCornerShape(18.dp),
         color = hudColors.pillBackground,
         border = BorderStroke(1.dp, hudColors.pillBorder),
-        tonalElevation = 6.dp,
+        tonalElevation = 0.dp,
         shadowElevation = 8.dp,
         content = content,
     )

@@ -28,9 +28,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import space.owork.draw.ui.theme.LocalHudColors
 
 /**
- * Tablet-first centered modal replacing phone-oriented bottom sheets across Drawspace.
+ * Tablet-first centered modal with crisp neutral studio colors (zero M3 tonal tint washout).
  */
 @Composable
 fun StudioModal(
@@ -42,6 +43,7 @@ fun StudioModal(
     headerActions: @Composable RowScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val hudColors = LocalHudColors.current
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -53,16 +55,16 @@ fun StudioModal(
                 .heightIn(max = maxHeight)
                 .fillMaxWidth(),
             shape = RoundedCornerShape(22.dp),
-            color = MaterialTheme.colorScheme.surface,
+            color = hudColors.modalBackground,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-            tonalElevation = 8.dp,
+            tonalElevation = 0.dp,
             shadowElevation = 24.dp,
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 22.dp, end = 14.dp, top = 16.dp, bottom = 12.dp),
+                        .padding(start = 22.dp, end = 16.dp, top = 16.dp, bottom = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
@@ -78,12 +80,13 @@ fun StudioModal(
                     }
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         headerActions()
                         Surface(
                             shape = CircleShape,
-                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            color = hudColors.modalCard,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)),
                         ) {
                             IconButton(
                                 onClick = onDismiss,
@@ -98,11 +101,11 @@ fun StudioModal(
                         }
                     }
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.75f))
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 22.dp, vertical = 16.dp),
+                        .padding(horizontal = 22.dp, vertical = 18.dp),
                     content = content,
                 )
             }

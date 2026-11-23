@@ -100,36 +100,42 @@ fun DocumentMenuModal(
         maxWidth = 600.dp,
         maxHeight = 620.dp,
     ) {
-        // Tab switcher
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        // Recessed segmented tab switcher with concentric radii (14dp outer - 5dp pad = 9dp inner)
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            color = hudColors.modalTrack,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.75f)),
         ) {
-            DocumentModalTab.entries.forEach { tab ->
-                val selected = activeTab == tab
-                Surface(
-                    onClick = { activeTab = tab },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(9.dp),
-                    color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                ) {
-                    Box(
-                        modifier = Modifier.padding(vertical = 8.dp),
-                        contentAlignment = Alignment.Center,
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(5.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                DocumentModalTab.entries.forEach { tab ->
+                    val selected = activeTab == tab
+                    Surface(
+                        onClick = { activeTab = tab },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(9.dp),
+                        color = if (selected) hudColors.modalCard else Color.Transparent,
+                        border = if (selected) BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null,
                     ) {
-                        Text(
-                            text = tab.label,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = if (selected) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                        )
+                        Box(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = tab.label,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = if (selected) {
+                                    MaterialTheme.colorScheme.onSurface
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
+                        }
                     }
                 }
             }
@@ -156,12 +162,15 @@ fun DocumentMenuModal(
                             onValueChange = { draftTitle = it },
                             label = { Text("Sketch Name") },
                             placeholder = { Text("Unnamed Sketch") },
+                            shape = RoundedCornerShape(12.dp),
                             singleLine = true,
                             modifier = Modifier.weight(1f),
                         )
                         val normalizedDraft = draftTitle.trim().ifEmpty { "Unnamed Sketch" }
                         FilledTonalButton(
                             enabled = normalizedDraft != doc.title,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.height(50.dp),
                             onClick = { onRename(draftTitle) },
                         ) {
                             Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -181,10 +190,13 @@ fun DocumentMenuModal(
                             onValueChange = { snapshotDraft = it },
                             label = { Text("Save Named Snapshot") },
                             placeholder = { Text("e.g. Base colors done") },
+                            shape = RoundedCornerShape(12.dp),
                             singleLine = true,
                             modifier = Modifier.weight(1f),
                         )
                         FilledTonalButton(
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.height(50.dp),
                             onClick = {
                                 val label = snapshotDraft.trim().ifEmpty { "Snapshot" }
                                 snapshotDraft = ""
@@ -478,12 +490,13 @@ private fun ModalActionCard(
     modifier: Modifier = Modifier,
     onClick: () -> Unit,
 ) {
+    val hudColors = LocalHudColors.current
     Surface(
         onClick = onClick,
         modifier = modifier,
         shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)),
+        color = hudColors.modalCard,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.75f)),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),

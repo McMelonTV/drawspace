@@ -1,5 +1,6 @@
 package space.owork.draw.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -36,6 +38,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import space.owork.draw.AppUiState
 import space.owork.draw.storage.CheckpointInfo
+import space.owork.draw.ui.theme.LocalHudColors
 import java.text.DateFormat
 import java.util.Date
 
@@ -47,6 +50,7 @@ fun VersionHistoryModal(
     onRestoreCheckpoint: (CheckpointInfo) -> Unit,
     onRequestCheckpointPreview: (String) -> Unit,
 ) {
+    val hudColors = LocalHudColors.current
     var snapshotLabel by remember { mutableStateOf("") }
 
     StudioModal(
@@ -66,10 +70,13 @@ fun VersionHistoryModal(
                 value = snapshotLabel,
                 onValueChange = { snapshotLabel = it },
                 placeholder = { Text("Name a new snapshot…") },
+                shape = RoundedCornerShape(12.dp),
                 singleLine = true,
                 modifier = Modifier.weight(1f),
             )
             FilledTonalButton(
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.height(50.dp),
                 onClick = {
                     val label = snapshotLabel.trim().ifEmpty { "Snapshot" }
                     snapshotLabel = ""
@@ -119,7 +126,8 @@ fun VersionHistoryModal(
                 }
                 Surface(
                     shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
+                    color = hudColors.modalCard,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Row(
