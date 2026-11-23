@@ -50,7 +50,11 @@ object DocumentPreviewGenerator {
             val layerOpacity = layer.opacity.coerceIn(0f, 1f)
             sb.append("""    <g id="${escapeXml(layer.id)}" opacity="${fmt3(layerOpacity)}">""").append('\n')
             for (stroke in layer.activeStrokes) {
-                if (stroke.points.isEmpty() || stroke.brush.tool == ToolType.ERASER) continue
+                if (stroke.points.isEmpty() || stroke.brush.tool != ToolType.FILL) continue
+                appendStrokeSvg(sb, stroke)
+            }
+            for (stroke in layer.activeStrokes) {
+                if (stroke.points.isEmpty() || stroke.brush.tool == ToolType.ERASER || stroke.brush.tool == ToolType.FILL) continue
                 appendStrokeSvg(sb, stroke)
             }
             sb.append("    </g>\n")

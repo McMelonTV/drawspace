@@ -25,8 +25,9 @@ sealed interface BucketFillResult {
  */
 object BucketFillEngine {
 
-    private const val MAX_GRID_DIM = 720
-    private const val EMPTY_CELL = 0
+    private const val MAX_GRID_DIM = 1024
+    private const val FILL_TAG_BIT = 0x01000000
+    private const val LINE_BARRIER_BIT = 0x02000000
 
     fun floodFill(
         document: Document,
@@ -97,21 +98,25 @@ object BucketFillEngine {
         val seedX = ((seedWorldX - workRect.left) / cellSize).toInt().coerceIn(0, gridW - 1)
         val seedY = ((seedWorldY - workRect.top) / cellSize).toInt().coerceIn(0, gridH - 1)
 
-        // Rasterize existing strokes & fills onto grid: 0 = empty, non-zero = stroke/fill RGB tag
+        // Rasterize existing strokes & fills onto grid:
+        // 0 = empty, FILL_TAG_BIT | rgb = filled region, LINE_BARRIER_BIT | rgb = line/brush stroke
         val grid = IntArray(gridW * gridH)
+        // Rasterize existing fills first, then line strokes on top (matching visual render order)
         for (stroke in strokes) {
-            if (stroke.brush.tool == ToolType.ERASER || stroke.points.isEmpty()) continue
+            if (stroke.brush.tool != ToolType.FILL || stroke.points.isEmpty()) continue
             if (!stroke.bounds.intersects(workRect)) continue
-            val tag = (stroke.brush.colorArgb and 0x00FFFFFF) or 0x01000000
-            if (stroke.brush.tool == ToolType.FILL) {
-                rasterizeFillStroke(stroke, workRect, cellSize, grid, gridW, gridH, tag)
-            } else {
-                rasterizeLineStroke(stroke, workRect, cellSize, grid, gridW, gridH, tag)
-            }
+            val tag = (stroke.brush.colorArgb and 0x00FFFFFF) or FILL_TAG_BIT
+            rasterizeFillStroke(stroke, workRect, cellSize, grid, gridW, gridH, tag)
+        }
+        for (stroke in strokes) {
+            if (stroke.brush.tool == ToolType.ERASER || stroke.brush.tool == ToolType.FILL || stroke.points.isEmpty()) continue
+            if (!stroke.bounds.intersects(workRect)) continue
+            val tag = (stroke.brush.colorArgb and 0x00FFFFFF) or LINE_BARRIER_BIT
+            rasterizeLineStroke(stroke, workRect, cellSize, grid, gridW, gridH, tag)
         }
 
         val targetTag = grid[seedY * gridW + seedX]
-        val desiredTag = (fillBrush.colorArgb and 0x00FFFFFF) or 0x01000000
+        val desiredTag = (fillBrush.colorArgb and 0x00FFFFFF) or FILL_TAG_BIT
         if (targetTag == desiredTag && fillBrush.opacity >= 0.99f) {
             return BucketFillResult.AlreadyFilled
         }
@@ -186,9 +191,12 @@ object BucketFillEngine {
             return BucketFillResult.OpenRegion
         }
 
+        // Tuck 1 cell strictly into surrounding LINE_BARRIER pixels so the fill sits cleanly
+        // underneath the anti-aliased stroke edge with zero gaps and zero bleed-through.
+        val tucked = dilateIntoLineBarriers(filled, grid, gridW, gridH)
+
         // Convert filled boolean mask into vertically merged world-space rectangles.
-        // Tuck each rect outward by 0.45 * cellSize so edges meet strokes cleanly without seams.
-        val rects = extractMergedRects(filled, gridW, gridH, workRect, cellSize)
+        val rects = extractMergedRects(tucked, gridW, gridH, workRect, cellSize)
         if (rects.isEmpty()) return BucketFillResult.OpenRegion
 
         val pts = ArrayList<StrokePoint>(rects.size * 2)
@@ -214,6 +222,32 @@ object BucketFillEngine {
         return BucketFillResult.Success(stroke)
     }
 
+    private fun dilateIntoLineBarriers(
+        filled: BooleanArray,
+        grid: IntArray,
+        gridW: Int,
+        gridH: Int,
+    ): BooleanArray {
+        val out = filled.copyOf()
+        for (y in 0 until gridH) {
+            val rowOff = y * gridW
+            for (x in 0 until gridW) {
+                val idx = rowOff + x
+                if (filled[idx]) continue
+                if ((grid[idx] and LINE_BARRIER_BIT) == 0) continue
+                val touchesFill =
+                    (x > 0 && filled[idx - 1]) ||
+                        (x < gridW - 1 && filled[idx + 1]) ||
+                        (y > 0 && filled[idx - gridW]) ||
+                        (y < gridH - 1 && filled[idx + gridW])
+                if (touchesFill) {
+                    out[idx] = true
+                }
+            }
+        }
+        return out
+    }
+
     private fun extractMergedRects(
         filled: BooleanArray,
         gridW: Int,
@@ -221,7 +255,7 @@ object BucketFillEngine {
         workRect: WorldRect,
         cellSize: Float,
     ): List<WorldRect> {
-        val tuck = cellSize * 0.45f
+        val tuck = cellSize * 0.25f
         // Track active spans from the previous row: key = (startX shl 16) or endX -> ActiveRect
         data class ActiveSpan(val x0: Int, val x1: Int, val y0: Int, var y1: Int)
         var prevActive = HashMap<Int, ActiveSpan>()
@@ -301,7 +335,7 @@ object BucketFillEngine {
     ) {
         val pts = stroke.points
         val brush = stroke.brush
-        val baseRadiusCells = max(brush.sizeWorldPx * 0.45f / cellSize, 1.15f)
+        val baseRadiusCells = max(brush.sizeWorldPx * 0.48f / cellSize, 1.35f)
 
         fun stampDisc(gx: Float, gy: Float, rCells: Float) {
             val ri = ceil(rCells).toInt()
@@ -340,7 +374,7 @@ object BucketFillEngine {
             val steps = ceil(dist / max(baseRadiusCells * 0.45f, 0.6f)).toInt().coerceAtLeast(1)
             val avgP = (a.pressure + b.pressure) * 0.5f
             val pFactor = (1f - brush.pressureSizeSensitivity) + brush.pressureSizeSensitivity * avgP.coerceIn(0.1f, 1.3f)
-            val rCells = max(brush.sizeWorldPx * pFactor * 0.45f / cellSize, 1.15f)
+            val rCells = max(brush.sizeWorldPx * pFactor * 0.48f / cellSize, 1.35f)
             for (s in 0..steps) {
                 val t = s.toFloat() / steps
                 stampDisc(ax + (bx - ax) * t, ay + (by - ay) * t, rCells)

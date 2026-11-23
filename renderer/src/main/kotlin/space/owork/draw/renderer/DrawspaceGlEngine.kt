@@ -282,8 +282,18 @@ internal class DrawspaceGlEngine {
         GLES30.glUniform1f(uStrokeAaFeatherPx, aaFeatherPx)
         bindBoundsUniforms(docBounds)
 
+        // Pass 1: bucket fills render cleanly behind lineart so anti-aliased outlines stay razor-sharp
         for (stroke in strokes) {
-            if (stroke.brush.tool == ToolType.ERASER) continue
+            if (stroke.brush.tool != ToolType.FILL) continue
+            if (!stroke.bounds.intersects(visibleWorld)) continue
+            val cached = getOrBuildVbo(stroke)
+            if (cached.vertexCount == 0) continue
+            drawVbo(cached.vboId, cached.vertexCount, cached.brush)
+        }
+
+        // Pass 2: line & brush strokes render on top
+        for (stroke in strokes) {
+            if (stroke.brush.tool == ToolType.ERASER || stroke.brush.tool == ToolType.FILL) continue
             if (!stroke.bounds.intersects(visibleWorld)) continue
             val cached = getOrBuildVbo(stroke)
             if (cached.vertexCount == 0) continue

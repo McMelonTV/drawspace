@@ -116,9 +116,9 @@ fun DocumentThumbnailCanvas(
                 )
             }
 
-            val path = Path()
+            // Pass 1: bucket fills behind linework
             for (stroke in summary.previewStrokes) {
-                if (stroke.brush.tool == ToolType.ERASER || stroke.points.isEmpty()) continue
+                if (stroke.brush.tool != ToolType.FILL || stroke.points.isEmpty()) continue
                 val pts = stroke.points
                 val isHighlighted = stroke.id in highlightStrokeIds
                 val strokeColor = if (isHighlighted) {
@@ -126,21 +126,31 @@ fun DocumentThumbnailCanvas(
                 } else {
                     Color(stroke.brush.colorArgb).copy(alpha = stroke.brush.opacity.coerceIn(0.08f, 1f))
                 }
-                if (stroke.brush.tool == ToolType.FILL) {
-                    var i = 0
-                    while (i + 1 < pts.size) {
-                        val l = originX + pts[i].x * scale
-                        val t = originY + pts[i].y * scale
-                        val r = originX + pts[i + 1].x * scale
-                        val b = originY + pts[i + 1].y * scale
-                        drawRect(
-                            color = strokeColor,
-                            topLeft = Offset(l, t),
-                            size = Size((r - l).coerceAtLeast(0.5f), (b - t).coerceAtLeast(0.5f)),
-                        )
-                        i += 2
-                    }
-                    continue
+                var i = 0
+                while (i + 1 < pts.size) {
+                    val l = originX + pts[i].x * scale
+                    val t = originY + pts[i].y * scale
+                    val r = originX + pts[i + 1].x * scale
+                    val b = originY + pts[i + 1].y * scale
+                    drawRect(
+                        color = strokeColor,
+                        topLeft = Offset(l, t),
+                        size = Size((r - l).coerceAtLeast(0.5f), (b - t).coerceAtLeast(0.5f)),
+                    )
+                    i += 2
+                }
+            }
+
+            // Pass 2: line & brush strokes on top
+            val path = Path()
+            for (stroke in summary.previewStrokes) {
+                if (stroke.brush.tool == ToolType.ERASER || stroke.brush.tool == ToolType.FILL || stroke.points.isEmpty()) continue
+                val pts = stroke.points
+                val isHighlighted = stroke.id in highlightStrokeIds
+                val strokeColor = if (isHighlighted) {
+                    highlightColor
+                } else {
+                    Color(stroke.brush.colorArgb).copy(alpha = stroke.brush.opacity.coerceIn(0.08f, 1f))
                 }
                 val strokeW = (stroke.brush.sizeWorldPx * scale * if (isHighlighted) 1.35f else 1f).coerceIn(1.1f, 16f)
 

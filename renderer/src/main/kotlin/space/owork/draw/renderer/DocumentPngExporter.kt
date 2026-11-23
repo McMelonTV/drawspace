@@ -61,7 +61,11 @@ object DocumentPngExporter {
             for (layer in document.layers) {
                 if (!layer.visible || layer !is Layer.StrokeLayer) continue
                 for (stroke in layer.activeStrokes) {
-                    if (stroke.brush.tool == ToolType.ERASER || stroke.points.isEmpty()) continue
+                    if (stroke.brush.tool != ToolType.FILL || stroke.points.isEmpty()) continue
+                    drawStroke(canvas, paint, stroke, layer.opacity)
+                }
+                for (stroke in layer.activeStrokes) {
+                    if (stroke.brush.tool == ToolType.ERASER || stroke.brush.tool == ToolType.FILL || stroke.points.isEmpty()) continue
                     drawStroke(canvas, paint, stroke, layer.opacity)
                 }
             }
