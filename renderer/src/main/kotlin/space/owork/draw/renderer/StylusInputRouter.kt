@@ -6,6 +6,8 @@ import android.view.View
 import androidx.input.motionprediction.MotionEventPredictor
 import space.owork.draw.engine.BrushSpec
 import space.owork.draw.engine.CameraLocks
+import space.owork.draw.engine.CanvasBackground
+import space.owork.draw.engine.GridSnapper
 import space.owork.draw.engine.Stroke
 import space.owork.draw.engine.StrokePoint
 import space.owork.draw.engine.StrokeSmoother
@@ -40,6 +42,8 @@ internal class StylusInputRouter(
         fun currentSmoothing(): StrokeSmoothingLevel
         fun roundTurnsAndEnds(): Boolean
         fun snapLineAngles(): Boolean
+        fun snapLineToGrid(): Boolean
+        fun currentBackground(): CanvasBackground
         fun allowFingerDrawing(): Boolean
         fun onActiveStrokeUpdated(brush: BrushSpec, points: List<StrokePoint>, predictedTip: StrokePoint?)
         fun onActiveStrokeCommitted(stroke: Stroke)
@@ -181,7 +185,12 @@ internal class StylusInputRouter(
         activeBrush = effectiveBrush
         isErasing = effectiveBrush.tool == ToolType.ERASER
 
-        val sample = extractSample(event, pointerIndex)
+        val rawSample = extractSample(event, pointerIndex)
+        val sample = if (effectiveBrush.tool == ToolType.LINE && callbacks.snapLineToGrid()) {
+            GridSnapper.snapPoint(rawSample, callbacks.currentBackground())
+        } else {
+            rawSample
+        }
         activePoints.add(sample)
         if (effectiveBrush.tool == ToolType.FILL) {
             return
@@ -234,6 +243,9 @@ internal class StylusInputRouter(
     }
 
     private fun snapIfEnabled(start: StrokePoint, rawEnd: StrokePoint): StrokePoint {
+        if (callbacks.snapLineToGrid()) {
+            return GridSnapper.snapPoint(rawEnd, callbacks.currentBackground())
+        }
         if (!callbacks.snapLineAngles()) return rawEnd
         val dx = rawEnd.x - start.x
         val dy = rawEnd.y - start.y

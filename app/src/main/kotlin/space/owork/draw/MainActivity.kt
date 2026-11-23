@@ -101,6 +101,7 @@ class MainActivity : ComponentActivity() {
                                 onOpacityChange = viewModel::updateBrushOpacity,
                                 onToggleFingerDrawing = viewModel::toggleFingerDrawing,
                                 onToggleSnapLineAngles = viewModel::toggleSnapLineAngles,
+                                onToggleSnapLineToGrid = viewModel::toggleSnapLineToGrid,
                                 onToggleHidePattern = viewModel::toggleHidePatternTemporarily,
                                 onCycleLockMode = viewModel::cycleLockMode,
                                 onUpdateBackground = viewModel::updateCanvasBackground,

@@ -12,6 +12,7 @@ import space.owork.draw.engine.AntiAliasingMode
 import space.owork.draw.engine.AppTheme
 import space.owork.draw.engine.BrushSpec
 import space.owork.draw.engine.CameraLocks
+import space.owork.draw.engine.CanvasBackground
 import space.owork.draw.engine.Document
 import space.owork.draw.engine.Stroke
 import space.owork.draw.engine.StrokePoint
@@ -51,6 +52,8 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
     private var roundTurnsAndEndsEnabled = true
     @Volatile
     private var snapLineAnglesEnabled = false
+    @Volatile
+    private var snapLineToGridEnabled = false
     @Volatile
     private var hidePatternEnabled = false
     @Volatile
@@ -122,6 +125,8 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
             override fun currentSmoothing(): StrokeSmoothingLevel = smoothingRef.get()
             override fun roundTurnsAndEnds(): Boolean = roundTurnsAndEndsEnabled
             override fun snapLineAngles(): Boolean = snapLineAnglesEnabled
+            override fun snapLineToGrid(): Boolean = snapLineToGridEnabled
+            override fun currentBackground(): CanvasBackground = documentRef.get()?.meta?.background ?: CanvasBackground()
             override fun allowFingerDrawing(): Boolean = allowFingerDraw
 
             override fun onActiveStrokeUpdated(
@@ -248,6 +253,10 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
 
     fun setSnapLineAngles(enabled: Boolean) {
         snapLineAnglesEnabled = enabled
+    }
+
+    fun setSnapLineToGrid(enabled: Boolean) {
+        snapLineToGridEnabled = enabled
     }
 
     fun setHidePattern(hidden: Boolean) {

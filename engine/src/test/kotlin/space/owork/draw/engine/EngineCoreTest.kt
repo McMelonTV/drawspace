@@ -173,4 +173,23 @@ class EngineCoreTest {
         val outsideRes = BucketFillEngine.floodFill(doc, 250f, 250f, fillBrush)
         assertTrue("Expected OpenRegion, got $outsideRes", outsideRes is BucketFillResult.OpenRegion)
     }
+
+    @Test
+    fun `grid snapper hits exact square and isometric 3-way intersections`() {
+        val squareBg = CanvasBackground(pattern = BackgroundPattern.SQUARE_GRID, spacingPx = 40f)
+        val sq = GridSnapper.snapWorld(102f, -58f, squareBg)
+        assertEquals(120f, sq.x, 1e-4f)
+        assertEquals(-40f, sq.y, 1e-4f)
+
+        val isoBg = CanvasBackground(pattern = BackgroundPattern.ISOMETRIC, spacingPx = 48f)
+        val iso = GridSnapper.snapWorld(75f, 115f, isoBg)
+        val s = 48f
+        // All 3 isometric shader dot products must be exact integer multiples of spacing s
+        val k1 = iso.x / s
+        val k2 = (0.5f * iso.x + 0.8660254f * iso.y) / s
+        val k3 = (-0.5f * iso.x + 0.8660254f * iso.y) / s
+        assertEquals(kotlin.math.round(k1), k1, 1e-3f)
+        assertEquals(kotlin.math.round(k2), k2, 1e-3f)
+        assertEquals(kotlin.math.round(k3), k3, 1e-3f)
+    }
 }

@@ -114,6 +114,7 @@ fun CanvasScreen(
     onOpacityChange: (Float) -> Unit,
     onToggleFingerDrawing: () -> Unit,
     onToggleSnapLineAngles: () -> Unit,
+    onToggleSnapLineToGrid: () -> Unit,
     onToggleHidePattern: () -> Unit,
     onCycleLockMode: () -> Unit,
     onUpdateBackground: ((CanvasBackground) -> CanvasBackground) -> Unit,
@@ -163,6 +164,7 @@ fun CanvasScreen(
                     setStrokeSmoothing(state.settings.strokeSmoothing)
                     setRoundTurnsAndEnds(state.settings.roundTurnsAndEnds)
                     setSnapLineAngles(state.snapLineAngles)
+                    setSnapLineToGrid(state.snapLineToGrid)
                     setHidePattern(state.hidePatternTemporarily)
                     setDocument(doc)
                     setBrush(state.activeBrush)
@@ -176,6 +178,7 @@ fun CanvasScreen(
                 view.setStrokeSmoothing(state.settings.strokeSmoothing)
                 view.setRoundTurnsAndEnds(state.settings.roundTurnsAndEnds)
                 view.setSnapLineAngles(state.snapLineAngles)
+                view.setSnapLineToGrid(state.snapLineToGrid)
                 view.setHidePattern(state.hidePatternTemporarily)
                 view.setDocument(doc)
                 view.setBrush(state.activeBrush)
@@ -474,8 +477,15 @@ fun CanvasScreen(
                 }
 
                 if (state.activeTool == ToolType.LINE) {
+                    if (doc.meta.background.pattern != BackgroundPattern.BLANK) {
+                        FilterChip(
+                            selected = state.snapLineToGrid,
+                            onClick = onToggleSnapLineToGrid,
+                            label = { Text("Grid Snap") },
+                        )
+                    }
                     FilterChip(
-                        selected = state.snapLineAngles,
+                        selected = state.snapLineAngles && !state.snapLineToGrid,
                         onClick = onToggleSnapLineAngles,
                         label = { Text("15° Snap") },
                     )

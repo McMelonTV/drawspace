@@ -55,6 +55,7 @@ data class AppUiState(
     val palette: ColorPalette = ColorPalette(),
     val allowFingerDrawing: Boolean = true,
     val snapLineAngles: Boolean = false,
+    val snapLineToGrid: Boolean = false,
     val hidePatternTemporarily: Boolean = false,
     val lockMode: CanvasLockMode = CanvasLockMode.UNLOCKED,
     val canUndo: Boolean = false,
@@ -313,7 +314,17 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun toggleSnapLineAngles() {
-        _uiState.update { it.copy(snapLineAngles = !it.snapLineAngles) }
+        _uiState.update { state ->
+            val next = !state.snapLineAngles
+            state.copy(snapLineAngles = next, snapLineToGrid = if (next) false else state.snapLineToGrid)
+        }
+    }
+
+    fun toggleSnapLineToGrid() {
+        _uiState.update { state ->
+            val next = !state.snapLineToGrid
+            state.copy(snapLineToGrid = next, snapLineAngles = if (next) false else state.snapLineAngles)
+        }
     }
 
     fun toggleHidePatternTemporarily() {
