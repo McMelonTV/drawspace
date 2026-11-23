@@ -198,20 +198,48 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun closeDocumentToWorkspace() {
-        viewModelScope.launch {
-            checkpointIfDirty(label = null, isNamed = false)
-            commandStack.clear()
-            _uiState.update {
-                it.copy(
-                    activeDocument = null,
-                    canUndo = false,
-                    canRedo = false,
-                    history = emptyList(),
-                    historyPreviews = emptyMap(),
+        val closingDoc = _uiState.value.activeDocument
+        val needsCheckpoint = strokesSinceCheckpoint > 0 || pendingDeltas.isNotEmpty() || hasDirtyBackground
+        walFlushJob?.cancel()
+        idleCheckpointJob?.cancel()
+        backgroundSaveJob?.cancel()
+        pendingDeltas.clear()
+        strokesSinceCheckpoint = 0
+        hasDirtyBackground = false
+        commandStack.clear()
+        inFlightPreviewIds.clear()
+
+        // Immediately update the workspace gallery card and return to Workspace with zero UI wait.
+        _uiState.update { state ->
+            val updatedDocs = if (closingDoc != null) {
+                val visible = closingDoc.visibleStrokes()
+                val freshSummary = DocumentSummary(
+                    meta = closingDoc.meta,
+                    strokeCount = visible.size,
+                    hasUncommittedChanges = false,
+                    previewStrokes = visible,
+                    contentBounds = closingDoc.contentBounds(),
                 )
+                (listOf(freshSummary) + state.documents.filterNot { it.meta.id == closingDoc.id })
+                    .sortedByDescending { it.meta.updatedAtMs }
+            } else {
+                state.documents
             }
-            inFlightPreviewIds.clear()
-            refreshWorkspace()
+            state.copy(
+                activeDocument = null,
+                documents = updatedDocs,
+                canUndo = false,
+                canRedo = false,
+                history = emptyList(),
+                historyPreviews = emptyMap(),
+            )
+        }
+
+        // Persist the checkpoint safely on our serialized Git background queue.
+        if (closingDoc != null && needsCheckpoint) {
+            viewModelScope.launch {
+                store.checkpoint(closingDoc, label = null, isNamedSnapshot = false)
+            }
         }
     }
 
@@ -547,7 +575,7 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
     private suspend fun openDocumentInternal(doc: Document) {
         commandStack.restore(doc.undoStack)
         inFlightPreviewIds.clear()
-        val history = store.listHistory(doc.id)
+        // Transition to canvas immediately without blocking on RevWalk history traversal.
         _uiState.update { state ->
             state.copy(
                 activeDocument = doc,
@@ -557,10 +585,17 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
                 activeColorArgb = adaptInkColor(state.activeColorArgb, doc, state.appTheme),
                 canUndo = commandStack.canUndo,
                 canRedo = commandStack.canRedo,
-                history = history,
+                history = emptyList(),
                 historyPreviews = emptyMap(),
                 saveStatus = "Saved",
             )
+        }
+        val docId = doc.id
+        viewModelScope.launch {
+            val history = store.listHistory(docId)
+            _uiState.update { state ->
+                if (state.activeDocument?.id == docId) state.copy(history = history) else state
+            }
         }
     }
 

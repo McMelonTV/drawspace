@@ -7,6 +7,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.eclipse.jgit.lib.CommitBuilder
+import org.eclipse.jgit.lib.Config
 import org.eclipse.jgit.lib.Constants
 import org.eclipse.jgit.lib.ObjectChecker
 import org.eclipse.jgit.lib.ObjectId
@@ -14,10 +15,13 @@ import org.eclipse.jgit.lib.PersonIdent
 import org.eclipse.jgit.lib.RefUpdate
 import org.eclipse.jgit.lib.Repository
 import org.eclipse.jgit.revwalk.RevWalk
+import org.eclipse.jgit.storage.file.FileBasedConfig
 import org.eclipse.jgit.storage.file.FileRepositoryBuilder
 import org.eclipse.jgit.treewalk.filter.AndTreeFilter
 import org.eclipse.jgit.treewalk.filter.PathFilter
 import org.eclipse.jgit.treewalk.filter.TreeFilter
+import org.eclipse.jgit.util.FS
+import org.eclipse.jgit.util.SystemReader
 import space.owork.draw.engine.CanvasBackground
 import space.owork.draw.engine.CanvasMode
 import space.owork.draw.engine.ColorPalette
@@ -28,11 +32,13 @@ import space.owork.draw.engine.DocumentMeta
 import space.owork.draw.engine.DocumentPreviewGenerator
 import space.owork.draw.engine.Layer
 import space.owork.draw.engine.LayerKind
+import space.owork.draw.engine.Stroke
 import java.io.File
 import java.io.RandomAccessFile
 import java.time.Instant
 import java.time.ZoneOffset
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Corruption-hardened Git-native [WorkspaceStore] backed by a bare JGit repository.
@@ -63,7 +69,18 @@ class GitWorkspaceStore(
     @Volatile
     private var repository: Repository? = null
 
+    // Immutable content-addressed caches (safe because Git ObjectIds are SHA-1 immutable).
+    private var cachedHeadId: ObjectId? = null
+    private var cachedHeadFiles: Map<String, ObjectId> = emptyMap()
+    private val chunkStrokeCache = object : LinkedHashMap<ObjectId, List<Stroke>>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<ObjectId, List<Stroke>>?): Boolean = size > 128
+    }
+    private val documentCache = object : LinkedHashMap<String, Pair<String, Document>>(32, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Pair<String, Document>>?): Boolean = size > 32
+    }
+
     override suspend fun initialize() = withRepoLock {
+        installFastSystemReaderOnce()
         workspaceDir.mkdirs()
         val repo = openOrCreateBareRepo()
         repository = repo
@@ -89,7 +106,7 @@ class GitWorkspaceStore(
     override suspend fun listDocuments(): List<DocumentSummary> = withRepoLock {
         val repo = requireRepo()
         val head = resolveHeadCommit(repo) ?: return@withRepoLock emptyList()
-        val files = BareTreeBuilder.readAllBlobIds(repo, head)
+        val files = readHeadBlobIdsCached(repo, head)
         val docIds = extractDocumentIds(files)
         docIds.mapNotNull { docId ->
             runCatching {
@@ -130,7 +147,7 @@ class GitWorkspaceStore(
     override suspend fun loadDocument(documentId: String): Document = withRepoLock {
         val repo = requireRepo()
         val head = resolveHeadCommit(repo) ?: error("Workspace has no commits")
-        val files = BareTreeBuilder.readAllBlobIds(repo, head)
+        val files = readHeadBlobIdsCached(repo, head)
         val committed = readDocumentFromFiles(repo, files, documentId)
         wal.replayOnto(committed)
     }
@@ -217,7 +234,7 @@ class GitWorkspaceStore(
     override suspend fun loadWorkspacePalette(): ColorPalette = withRepoLock {
         val repo = requireRepo()
         val head = resolveHeadCommit(repo) ?: return@withRepoLock ColorPalette()
-        val files = BareTreeBuilder.readAllBlobIds(repo, head)
+        val files = readHeadBlobIdsCached(repo, head)
         val paletteId = files[WORKSPACE_PALETTE] ?: return@withRepoLock ColorPalette()
         runCatching {
             DocumentCodec.decodePalette(BareTreeBuilder.readBlobBytes(repo, paletteId))
@@ -441,12 +458,15 @@ class GitWorkspaceStore(
         message: String,
         timestampMs: Long,
     ): ObjectId {
-        val files = BareTreeBuilder.readAllBlobIds(repo, parentId)
+        val files = LinkedHashMap(readHeadBlobIdsCached(repo, parentId))
         val branchRefName = resolveCurrentBranchRefName(repo)
 
         val commitId = repo.newObjectInserter().use { inserter ->
+            val odb = repo.objectDatabase
+            // Skip zlib + disk write + fsync whenever an identical content-addressed blob already exists.
             val insertBlob: (ByteArray) -> ObjectId = { bytes ->
-                inserter.insert(Constants.OBJ_BLOB, bytes)
+                val computedId = inserter.idFor(Constants.OBJ_BLOB, bytes)
+                if (odb.has(computedId)) computedId else inserter.insert(Constants.OBJ_BLOB, bytes)
             }
             mutator(files, insertBlob)
 
@@ -484,7 +504,20 @@ class GitWorkspaceStore(
         ) {
             "Atomic ref update failed for $branchRefName: $result"
         }
+
+        // Warm head tree cache immediately with the newly committed file map.
+        cachedHeadId = commitId
+        cachedHeadFiles = files
         return commitId
+    }
+
+    private fun readHeadBlobIdsCached(repo: Repository, commitId: ObjectId?): Map<String, ObjectId> {
+        if (commitId == null) return emptyMap()
+        if (commitId == cachedHeadId) return cachedHeadFiles
+        val loaded = BareTreeBuilder.readAllBlobIds(repo, commitId)
+        cachedHeadId = commitId
+        cachedHeadFiles = loaded
+        return loaded
     }
 
     private fun readDocumentFromFiles(
@@ -495,6 +528,17 @@ class GitWorkspaceStore(
         val docPrefix = "docs/$documentId/"
         val metaId = files["${docPrefix}document.json"]
             ?: throw NoSuchElementException("Document '$documentId' not found")
+
+        // Compute an exact SHA-1 fingerprint of all blobs belonging to this document.
+        val fpBuilder = StringBuilder(128)
+        for (path in files.keys.filter { it.startsWith(docPrefix) && !it.endsWith(".svg") && !it.endsWith(".md") }.sorted()) {
+            fpBuilder.append(path).append('=').append(files[path]!!.name).append(';')
+        }
+        val fingerprint = fpBuilder.toString()
+        documentCache[documentId]?.let { (cachedFp, cachedDoc) ->
+            if (cachedFp == fingerprint) return cachedDoc
+        }
+
         val meta = DocumentCodec.decodeDocumentMeta(BareTreeBuilder.readBlobBytes(repo, metaId))
 
         val layers = meta.layerOrder.mapNotNull { layerId ->
@@ -504,11 +548,17 @@ class GitWorkspaceStore(
             when (layerMeta.kind) {
                 LayerKind.STROKE -> {
                     val strokePrefix = "${layerPrefix}strokes/"
-                    val chunkBytes = LinkedHashMap<String, ByteArray>()
-                    for ((path, blobId) in files) {
-                        if (path.startsWith(strokePrefix) && path.endsWith(".jsonl")) {
-                            chunkBytes[path.removePrefix(strokePrefix)] = BareTreeBuilder.readBlobBytes(repo, blobId)
+                    val chunkPaths = files.keys
+                        .filter { it.startsWith(strokePrefix) && it.endsWith(".jsonl") }
+                        .sorted()
+                    val allStrokes = ArrayList<Stroke>(chunkPaths.size * 64)
+                    for (path in chunkPaths) {
+                        val blobId = files[path] ?: continue
+                        val chunkStrokes = chunkStrokeCache.getOrPut(blobId) {
+                            val bytes = BareTreeBuilder.readBlobBytes(repo, blobId)
+                            DocumentCodec.decodeStrokeChunks(mapOf(path.removePrefix(strokePrefix) to bytes))
                         }
+                        allStrokes.addAll(chunkStrokes)
                     }
                     val tombstonesId = files["${layerPrefix}tombstones.jsonl"]
                     val tombstones = tombstonesId?.let {
@@ -521,7 +571,7 @@ class GitWorkspaceStore(
                         visible = layerMeta.visible,
                         opacity = layerMeta.opacity,
                         blendMode = layerMeta.blendMode,
-                        strokes = DocumentCodec.decodeStrokeChunks(chunkBytes),
+                        strokes = allStrokes,
                         tombstones = tombstones,
                     )
                 }
@@ -543,7 +593,9 @@ class GitWorkspaceStore(
         val undoStack = files["${docPrefix}undo_stack.json"]?.let {
             DocumentCodec.decodeUndoStack(BareTreeBuilder.readBlobBytes(repo, it))
         } ?: space.owork.draw.engine.UndoStackSnapshot()
-        return Document(meta = meta, layers = ensuredLayers, undoStack = undoStack)
+        val loaded = Document(meta = meta, layers = ensuredLayers, undoStack = undoStack)
+        documentCache[documentId] = fingerprint to loaded
+        return loaded
     }
 
     private fun extractDocumentIds(files: Map<String, ObjectId>): List<String> =
@@ -610,10 +662,49 @@ class GitWorkspaceStore(
 
     companion object {
         private val processLocks = ConcurrentHashMap<String, Mutex>()
+        private val systemReaderInstalled = AtomicBoolean(false)
         private const val DEFAULT_BRANCH_REF = "refs/heads/main"
         private const val BACKUP_LAST_GOOD_REF = "refs/backup/last-good"
         private const val ROOT_README = "README.md"
         private const val WORKSPACE_PALETTE = "library/palette.json"
         private const val NAMED_TRAILER = "Drawspace-Snapshot: named"
+
+        /**
+         * Avoids JGit's slow startup probes on Android (searching PATH for a `git` binary,
+         * reading `/etc/gitconfig` and `~/.gitconfig`, and measuring filesystem mtime resolution).
+         */
+        private fun installFastSystemReaderOnce() {
+            if (!systemReaderInstalled.compareAndSet(false, true)) return
+            // Never block cold startup for ~3s measuring filesystem mtime resolution (unneeded for bare repos).
+            FS.FileStoreAttributes.setBackground(true)
+            val delegate = SystemReader.getInstance()
+            SystemReader.setInstance(
+                object : SystemReader() {
+                    override fun getHostname(): String = "drawspace"
+                    override fun getenv(variable: String): String? = null
+                    override fun getProperty(key: String): String? = delegate.getProperty(key)
+                    override fun openUserConfig(parent: Config?, fs: FS?): FileBasedConfig =
+                        EmptyFileBasedConfig(parent, fs)
+
+                    override fun openSystemConfig(parent: Config?, fs: FS?): FileBasedConfig =
+                        EmptyFileBasedConfig(parent, fs)
+
+                    override fun openJGitConfig(parent: Config?, fs: FS?): FileBasedConfig =
+                        EmptyFileBasedConfig(parent, fs)
+
+                    @Deprecated("Deprecated in JGit")
+                    override fun getCurrentTime(): Long = System.currentTimeMillis()
+
+                    @Suppress("DEPRECATION")
+                    @Deprecated("Deprecated in JGit")
+                    override fun getTimezone(`when`: Long): Int = delegate.getTimezone(`when`)
+                },
+            )
+        }
     }
+}
+
+private class EmptyFileBasedConfig(parent: Config?, fs: FS?) : FileBasedConfig(parent, null, fs) {
+    override fun load() = Unit
+    override fun isOutdated(): Boolean = false
 }

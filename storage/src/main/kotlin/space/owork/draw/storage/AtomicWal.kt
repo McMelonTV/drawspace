@@ -53,8 +53,15 @@ internal class AtomicWal(
         val tmp = File(walDir, "$documentId.wal.tmp")
 
         val existingBytes = if (target.exists() && target.length() > 0L) target.readBytes() else ByteArray(0)
+        // Strip redundant undoStack snapshots from earlier deltas in the same batch (only last matters).
+        val lastIdx = nonEmpty.lastIndex
         val newLines = buildString {
-            for (d in nonEmpty) {
+            for (i in nonEmpty.indices) {
+                val d = if (i < lastIdx && nonEmpty[i].undoStack != null) {
+                    nonEmpty[i].copy(undoStack = null)
+                } else {
+                    nonEmpty[i]
+                }
                 append(DocumentCodec.compactJson.encodeToString(d))
                 append('\n')
             }
