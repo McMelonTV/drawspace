@@ -30,7 +30,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Redo
 import androidx.compose.material.icons.automirrored.outlined.Undo
-import androidx.compose.material.icons.outlined.AutoFixHigh
 import androidx.compose.material.icons.outlined.BorderColor
 import androidx.compose.material.icons.outlined.Brush
 import androidx.compose.material.icons.outlined.CenterFocusStrong
@@ -69,10 +68,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import space.owork.draw.AppUiState
+import space.owork.draw.R
 import space.owork.draw.engine.AppTheme
 import space.owork.draw.engine.BackgroundPattern
 import space.owork.draw.engine.CanvasBackground
@@ -322,7 +325,7 @@ fun CanvasScreen(
                     onClick = { onSelectTool(ToolType.MARKER) },
                 )
                 ToolRailButton(
-                    icon = Icons.Outlined.AutoFixHigh,
+                    painter = painterResource(R.drawable.ic_tool_eraser),
                     label = "Eraser",
                     selected = state.activeTool == ToolType.ERASER,
                     onClick = { onSelectTool(ToolType.ERASER) },
@@ -351,26 +354,34 @@ fun CanvasScreen(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f, fill = false),
-                ) {
-                    items(state.palette.swatches) { swatch ->
-                        val selected = state.activeTool != ToolType.ERASER && state.activeColorArgb == swatch.argb
-                        Box(
-                            modifier = Modifier
-                                .size(if (selected) 30.dp else 26.dp)
-                                .clip(CircleShape)
-                                .background(Color(swatch.argb))
-                                .border(
-                                    width = if (selected) 2.5.dp else 1.dp,
-                                    color = if (selected) MaterialTheme.colorScheme.primary else hudColors.swatchBorder,
-                                    shape = CircleShape,
-                                )
-                                .clickable { onSelectColor(swatch.argb) },
-                        )
+                if (state.activeTool != ToolType.ERASER) {
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f, fill = false),
+                    ) {
+                        items(state.palette.swatches) { swatch ->
+                            val selected = state.activeColorArgb == swatch.argb
+                            Box(
+                                modifier = Modifier
+                                    .size(if (selected) 30.dp else 26.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(swatch.argb))
+                                    .border(
+                                        width = if (selected) 2.5.dp else 1.dp,
+                                        color = if (selected) MaterialTheme.colorScheme.primary else hudColors.swatchBorder,
+                                        shape = CircleShape,
+                                    )
+                                    .clickable { onSelectColor(swatch.argb) },
+                            )
+                        }
                     }
+                } else {
+                    Text(
+                        text = "Eraser",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
 
                 // Size slider
@@ -388,7 +399,7 @@ fun CanvasScreen(
                         value = state.activeBrush.sizeWorldPx,
                         onValueChange = onSizeChange,
                         valueRange = 1f..64f,
-                        modifier = Modifier.width(110.dp),
+                        modifier = Modifier.width(if (state.activeTool == ToolType.ERASER) 160.dp else 110.dp),
                     )
                 }
 
@@ -818,6 +829,21 @@ private fun ToolRailButton(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
+    ToolRailButton(
+        painter = rememberVectorPainter(icon),
+        label = label,
+        selected = selected,
+        onClick = onClick,
+    )
+}
+
+@Composable
+private fun ToolRailButton(
+    painter: Painter,
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(12.dp),
@@ -826,7 +852,7 @@ private fun ToolRailButton(
     ) {
         Box(contentAlignment = Alignment.Center) {
             Icon(
-                imageVector = icon,
+                painter = painter,
                 contentDescription = label,
                 tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             )
