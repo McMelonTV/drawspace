@@ -5,7 +5,6 @@ import kotlin.math.floor
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.roundToInt
 
 sealed interface BucketFillResult {
     data class Success(val stroke: Stroke) : BucketFillResult
@@ -195,9 +194,12 @@ object BucketFillEngine {
             return BucketFillResult.OpenRegion
         }
 
-        // Tuck 1 cell (8-connected) strictly into surrounding LINE_BARRIER pixels so fills meet
-        // both orthogonal and diagonal strokes cleanly underneath the outline with zero micro-gaps.
-        val tucked = dilateIntoLineBarriers(filled, grid, gridW, gridH)
+        // Tuck strictly into surrounding LINE_BARRIER pixels:
+        // Pass 1 (8-connected): tucks 1 cell into barrier edge (safe even on 1px hairlines).
+        // Pass 2 (interior barrier only): tucks deeper toward the centerline of thicker strokes
+        // without ever touching an unfilled cell on the far side of the stroke.
+        val tucked1 = dilateIntoLineBarriers(filled, grid, gridW, gridH, interiorBarrierOnly = false)
+        val tucked = dilateIntoLineBarriers(tucked1, grid, gridW, gridH, interiorBarrierOnly = true)
 
         // Convert filled boolean mask into vertically merged world-space rectangles.
         val rects = extractMergedRects(tucked, gridW, gridH, workRect, cellSize)
@@ -231,6 +233,7 @@ object BucketFillEngine {
         grid: IntArray,
         gridW: Int,
         gridH: Int,
+        interiorBarrierOnly: Boolean,
     ): BooleanArray {
         val out = filled.copyOf()
         for (y in 0 until gridH) {
@@ -239,22 +242,25 @@ object BucketFillEngine {
                 val idx = rowOff + x
                 if (filled[idx]) continue
                 if ((grid[idx] and LINE_BARRIER_BIT) == 0) continue
-                // Check all 8 neighbors so diagonal edges never leave tiny corner pinholes.
+
                 var touchesFill = false
+                var touchesOutsideNonBarrier = false
                 val minNy = (y - 1).coerceAtLeast(0)
                 val maxNy = (y + 1).coerceAtMost(gridH - 1)
                 val minNx = (x - 1).coerceAtLeast(0)
                 val maxNx = (x + 1).coerceAtMost(gridW - 1)
-                outer@ for (ny in minNy..maxNy) {
+                for (ny in minNy..maxNy) {
                     val nRow = ny * gridW
                     for (nx in minNx..maxNx) {
-                        if (filled[nRow + nx]) {
+                        val nIdx = nRow + nx
+                        if (filled[nIdx]) {
                             touchesFill = true
-                            break@outer
+                        } else if (interiorBarrierOnly && (grid[nIdx] and LINE_BARRIER_BIT) == 0) {
+                            touchesOutsideNonBarrier = true
                         }
                     }
                 }
-                if (touchesFill) {
+                if (touchesFill && !touchesOutsideNonBarrier) {
                     out[idx] = true
                 }
             }
@@ -355,25 +361,26 @@ object BucketFillEngine {
         val baseRadiusCells = brush.sizeWorldPx * 0.34f / cellSize
 
         fun stampDisc(gx: Float, gy: Float, rCells: Float) {
-            val cx = gx.roundToInt()
-            val cy = gy.roundToInt()
+            // Grid cell (x, y) covers [x, x+1) x [y, y+1) with center at (x + 0.5, y + 0.5),
+            // matching seedX/seedY and extractMergedRects with zero half-cell shift.
+            val cx = floor(gx).toInt()
+            val cy = floor(gy).toInt()
             if (rCells <= 0.65f) {
                 if (cx in 0 until gridW && cy in 0 until gridH) {
                     grid[cy * gridW + cx] = tag
                 }
                 return
             }
-            val ri = ceil(rCells).toInt()
             val rSq = rCells * rCells
-            val minY = (cy - ri).coerceAtLeast(0)
-            val maxY = (cy + ri).coerceAtMost(gridH - 1)
-            val minX = (cx - ri).coerceAtLeast(0)
-            val maxX = (cx + ri).coerceAtMost(gridW - 1)
+            val minY = floor(gy - rCells).toInt().coerceAtLeast(0)
+            val maxY = floor(gy + rCells).toInt().coerceAtMost(gridH - 1)
+            val minX = floor(gx - rCells).toInt().coerceAtLeast(0)
+            val maxX = floor(gx + rCells).toInt().coerceAtMost(gridW - 1)
             for (y in minY..maxY) {
-                val dy = y - gy
+                val dy = (y + 0.5f) - gy
                 val rowOff = y * gridW
                 for (x in minX..maxX) {
-                    val dx = x - gx
+                    val dx = (x + 0.5f) - gx
                     if (dx * dx + dy * dy <= rSq) {
                         grid[rowOff + x] = tag
                     }
@@ -400,14 +407,14 @@ object BucketFillEngine {
             val stepLen = if (rCells <= 1.25f) 0.35f else max(rCells * 0.45f, 0.45f)
             val steps = ceil(dist / stepLen).toInt().coerceAtLeast(1)
 
-            var prevCx = ax.roundToInt()
-            var prevCy = ay.roundToInt()
+            var prevCx = floor(ax).toInt()
+            var prevCy = floor(ay).toInt()
             for (s in 0..steps) {
                 val t = s.toFloat() / steps
                 val gx = ax + (bx - ax) * t
                 val gy = ay + (by - ay) * t
-                val cx = gx.roundToInt()
-                val cy = gy.roundToInt()
+                val cx = floor(gx).toInt()
+                val cy = floor(gy).toInt()
                 // Always bridge diagonal pixel steps so 4-connected flood-fill can never leak
                 // through thin or medium diagonal strokes at any zoom level.
                 if (cx != prevCx && cy != prevCy) {
