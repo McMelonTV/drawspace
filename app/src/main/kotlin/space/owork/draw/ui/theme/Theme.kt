@@ -35,6 +35,7 @@ data class GlassPalette(
     val secondary: Color,
     val tertiary: Color,
     val separator: Color,
+    val hairline: Color,
     /** Solid high-contrast active/selected fill (white in dark/black, near-black in light). */
     val active: Color,
     val onActive: Color,
@@ -55,21 +56,22 @@ val LocalGlass = staticCompositionLocalOf { DarkGlassPalette }
 private val DarkGlassPalette = GlassPalette(
     isDark = true,
     background = Color(0xFF09090B),
-    elevated = Color(0xFF18181B),
-    elevated2 = Color(0xFF27272B),
+    elevated = Color(0xFF17171A),
+    elevated2 = Color(0xFF252529),
     text = Color(0xFFF5F5F7),
     secondary = Color(0xFFF5F5F7).copy(alpha = 0.62f),
     tertiary = Color(0xFFF5F5F7).copy(alpha = 0.36f),
-    separator = Color.White.copy(alpha = 0.10f),
+    separator = Color.White.copy(alpha = 0.08f),
+    hairline = Color.White.copy(alpha = 0.09f),
     active = Color(0xFFF7F7F9),
     onActive = Color(0xFF0E0E10),
-    glass = Color.White.copy(alpha = 0.08f),
-    glassStrong = Color.White.copy(alpha = 0.16f),
-    material = Color(0xFF1A1A1E).copy(alpha = 0.94f),
-    pillMaterial = Color(0xFF16161A).copy(alpha = 0.88f),
-    recessed = Color.Black.copy(alpha = 0.38f),
-    specularTop = Color.White.copy(alpha = 0.24f),
-    specularBottom = Color.White.copy(alpha = 0.04f),
+    glass = Color.White.copy(alpha = 0.075f),
+    glassStrong = Color.White.copy(alpha = 0.14f),
+    material = Color(0xFF17171B).copy(alpha = 0.96f),
+    pillMaterial = Color(0xFF151519).copy(alpha = 0.90f),
+    recessed = Color.Black.copy(alpha = 0.32f),
+    specularTop = Color.White.copy(alpha = 0.16f),
+    specularBottom = Color.White.copy(alpha = 0.05f),
     swatchBorder = Color.White.copy(alpha = 0.28f),
     destructive = Color(0xFFFF453A),
 )
@@ -77,21 +79,22 @@ private val DarkGlassPalette = GlassPalette(
 private val BlackGlassPalette = GlassPalette(
     isDark = true,
     background = Color(0xFF000000),
-    elevated = Color(0xFF0D0D0F),
-    elevated2 = Color(0xFF1B1B1F),
+    elevated = Color(0xFF0C0C0E),
+    elevated2 = Color(0xFF1A1A1E),
     text = Color(0xFFF7F7F9),
     secondary = Color(0xFFF7F7F9).copy(alpha = 0.60f),
     tertiary = Color(0xFFF7F7F9).copy(alpha = 0.34f),
-    separator = Color.White.copy(alpha = 0.11f),
+    separator = Color.White.copy(alpha = 0.09f),
+    hairline = Color.White.copy(alpha = 0.11f),
     active = Color(0xFFFFFFFF),
     onActive = Color(0xFF000000),
-    glass = Color.White.copy(alpha = 0.08f),
-    glassStrong = Color.White.copy(alpha = 0.17f),
-    material = Color(0xFF0C0C0E).copy(alpha = 0.96f),
-    pillMaterial = Color(0xFF050507).copy(alpha = 0.92f),
+    glass = Color.White.copy(alpha = 0.075f),
+    glassStrong = Color.White.copy(alpha = 0.15f),
+    material = Color(0xFF0A0A0C).copy(alpha = 0.97f),
+    pillMaterial = Color(0xFF040406).copy(alpha = 0.93f),
     recessed = Color(0xFF000000),
-    specularTop = Color.White.copy(alpha = 0.24f),
-    specularBottom = Color.White.copy(alpha = 0.05f),
+    specularTop = Color.White.copy(alpha = 0.18f),
+    specularBottom = Color.White.copy(alpha = 0.06f),
     swatchBorder = Color.White.copy(alpha = 0.34f),
     destructive = Color(0xFFFF453A),
 )
@@ -100,26 +103,27 @@ private val LightGlassPalette = GlassPalette(
     isDark = false,
     background = Color(0xFFF4F4F6),
     elevated = Color(0xFFFFFFFF),
-    elevated2 = Color(0xFFE7E7EC),
+    elevated2 = Color(0xFFE9E9EE),
     text = Color(0xFF111114),
     secondary = Color(0xFF111114).copy(alpha = 0.58f),
     tertiary = Color(0xFF111114).copy(alpha = 0.36f),
-    separator = Color.Black.copy(alpha = 0.09f),
+    separator = Color.Black.copy(alpha = 0.075f),
+    hairline = Color.Black.copy(alpha = 0.09f),
     active = Color(0xFF141417),
     onActive = Color(0xFFFFFFFF),
-    glass = Color.Black.copy(alpha = 0.055f),
-    glassStrong = Color.Black.copy(alpha = 0.11f),
-    material = Color(0xFFFAFAFC).copy(alpha = 0.95f),
-    pillMaterial = Color(0xFFFFFFFF).copy(alpha = 0.90f),
-    recessed = Color.Black.copy(alpha = 0.06f),
+    glass = Color.Black.copy(alpha = 0.05f),
+    glassStrong = Color.Black.copy(alpha = 0.10f),
+    material = Color(0xFFFCFCFD).copy(alpha = 0.97f),
+    pillMaterial = Color(0xFFFFFFFF).copy(alpha = 0.92f),
+    recessed = Color.Black.copy(alpha = 0.055f),
     specularTop = Color.Black.copy(alpha = 0.08f),
-    specularBottom = Color.Black.copy(alpha = 0.16f),
+    specularBottom = Color.Black.copy(alpha = 0.10f),
     swatchBorder = Color.Black.copy(alpha = 0.22f),
     destructive = Color(0xFFD93025),
 )
 
 /**
- * Liquid-glass surface: translucent fill + top-bright specular rim light.
+ * Floating glass container (HUD pills & top-level modals): translucent fill + gentle rim light.
  */
 fun Modifier.glass(
     shape: Shape,
@@ -138,6 +142,21 @@ fun Modifier.glass(
         } else {
             Modifier
         },
+    )
+
+/**
+ * Clean nested surface with uniform hairline border (used inside modals & cards so edges never
+ * look uneven or compromise readability).
+ */
+fun Modifier.glassSurface(
+    shape: Shape,
+    palette: GlassPalette,
+    fill: Color = palette.glass,
+    bordered: Boolean = false,
+): Modifier = clip(shape)
+    .background(fill)
+    .then(
+        if (bordered) Modifier.border(1.dp, palette.hairline, shape) else Modifier,
     )
 
 private val StudioTypography = Typography(

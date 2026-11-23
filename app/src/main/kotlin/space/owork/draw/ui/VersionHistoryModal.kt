@@ -34,7 +34,7 @@ import androidx.compose.ui.unit.sp
 import space.owork.draw.AppUiState
 import space.owork.draw.storage.CheckpointInfo
 import space.owork.draw.ui.theme.LocalGlass
-import space.owork.draw.ui.theme.glass
+import space.owork.draw.ui.theme.glassSurface
 import java.text.DateFormat
 import java.util.Date
 
@@ -118,7 +118,7 @@ fun VersionHistoryModal(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .glass(cardShape, p, fill = p.glass, edge = true)
+                        .glassSurface(cardShape, p, fill = p.glass, bordered = false)
                         .padding(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),

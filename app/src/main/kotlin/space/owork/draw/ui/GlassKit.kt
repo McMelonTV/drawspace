@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -58,6 +57,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import space.owork.draw.ui.theme.LocalGlass
 import space.owork.draw.ui.theme.glass
+import space.owork.draw.ui.theme.glassSurface
 
 /**
  * Floating translucent glass capsule/panel used for canvas HUD toolbars.
@@ -71,7 +71,7 @@ fun GlassPill(
     val p = LocalGlass.current
     Box(
         modifier = modifier
-            .shadow(elevation = if (p.isDark) 24.dp else 14.dp, shape = shape, clip = false)
+            .shadow(elevation = if (p.isDark) 20.dp else 12.dp, shape = shape, clip = false)
             .glass(shape = shape, palette = p, fill = p.pillMaterial),
     ) {
         content()
@@ -103,7 +103,7 @@ fun GlassModal(
                 .widthIn(min = 340.dp, max = maxWidth)
                 .heightIn(max = maxHeight)
                 .fillMaxWidth()
-                .shadow(40.dp, outerShape, clip = false)
+                .shadow(32.dp, outerShape, clip = false)
                 .glass(outerShape, p, fill = p.material),
         ) {
             Row(
@@ -211,7 +211,7 @@ fun GlassButton(
     Row(
         modifier = modifier
             .height(height)
-            .glass(CircleShape, p, fill = fill, edge = !primary && !destructive)
+            .glassSurface(CircleShape, p, fill = fill, bordered = false)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -284,7 +284,7 @@ fun GlassIconButton(
     Box(
         modifier = modifier
             .size(size)
-            .glass(CircleShape, p, fill = fill, edge = !active && !subtle)
+            .glassSurface(CircleShape, p, fill = fill, bordered = false)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -303,7 +303,7 @@ fun GlassIconButton(
 }
 
 /**
- * Capsule option chip: subtle glass at rest, solid monochrome inversion when selected.
+ * Capsule option chip: subtle borderless fill at rest, solid monochrome inversion when selected.
  */
 @Composable
 fun GlassChip(
@@ -319,7 +319,7 @@ fun GlassChip(
     Row(
         modifier = modifier
             .height(34.dp)
-            .glass(CircleShape, p, fill = fill, edge = !selected)
+            .glassSurface(CircleShape, p, fill = fill, bordered = false)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -357,7 +357,7 @@ fun <T> GlassSegmentedTabs(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .glass(CircleShape, p, fill = p.recessed, edge = true)
+            .glassSurface(CircleShape, p, fill = p.recessed, bordered = false)
             .padding(4.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -389,7 +389,7 @@ fun <T> GlassSegmentedTabs(
 }
 
 /**
- * Recessed monochrome text input field matching the liquid-glass studio kit.
+ * Recessed monochrome text input field with subtle uniform hairline border.
  */
 @Composable
 fun GlassTextField(
@@ -404,7 +404,7 @@ fun GlassTextField(
     Box(
         modifier = modifier
             .height(40.dp)
-            .glass(shape, p, fill = p.recessed, edge = true)
+            .glassSurface(shape, p, fill = p.recessed, bordered = true)
             .padding(horizontal = 13.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
@@ -446,7 +446,7 @@ fun GlassToggle(
         modifier = modifier
             .width(46.dp)
             .height(26.dp)
-            .glass(CircleShape, p, fill = if (checked) p.active else p.glassStrong, edge = !checked)
+            .glassSurface(CircleShape, p, fill = if (checked) p.active else p.glassStrong, bordered = false)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -458,9 +458,9 @@ fun GlassToggle(
             modifier = Modifier
                 .offset(x = thumbOffset)
                 .size(22.dp)
-                .shadow(4.dp, CircleShape)
+                .shadow(3.dp, CircleShape)
                 .clip(CircleShape)
-                .background(if (checked) p.onActive else p.text),
+                .background(if (checked) p.onActive else p.elevated),
         )
     }
 }
@@ -504,21 +504,18 @@ fun GlassSlider(
         val centerY = size.height * 0.5f
         val thumbX = thumbR + fraction * usableW
 
-        // Track background
         drawRoundRect(
             color = p.glassStrong,
             topLeft = Offset(thumbR, centerY - trackH * 0.5f),
             size = Size(usableW, trackH),
             cornerRadius = CornerRadius(trackH * 0.5f, trackH * 0.5f),
         )
-        // Active monochrome fill
         drawRoundRect(
             color = p.active,
             topLeft = Offset(thumbR, centerY - trackH * 0.5f),
             size = Size((thumbX - thumbR).coerceAtLeast(0f), trackH),
             cornerRadius = CornerRadius(trackH * 0.5f, trackH * 0.5f),
         )
-        // Crisp thumb
         drawCircle(
             color = p.active,
             radius = thumbR,
@@ -528,50 +525,55 @@ fun GlassSlider(
 }
 
 /**
- * Clean tvOS/iPadOS-style glass action row inside modals and menus.
+ * Clean borderless tvOS-style menu row (like tvtube's QuickActionsDialog rows).
  */
 @Composable
 fun GlassMenuRow(
     title: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    subtitle: String? = null,
+    detail: String? = null,
     icon: ImageVector? = null,
-    trailing: (@Composable () -> Unit)? = null,
+    highlighted: Boolean = false,
 ) {
     val p = LocalGlass.current
     val shape = RoundedCornerShape(14.dp)
+    val fill = if (highlighted) p.active else p.glass
+    val ink = if (highlighted) p.onActive else p.text
+    val subInk = if (highlighted) p.onActive.copy(alpha = 0.65f) else p.secondary
+
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .glass(shape, p, fill = p.glass, edge = true)
+            .heightIn(min = 46.dp)
+            .glassSurface(shape, p, fill = fill, bordered = false)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick,
             )
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         if (icon != null) {
-            Box(
-                modifier = Modifier
-                    .size(34.dp)
-                    .clip(CircleShape)
-                    .background(p.glassStrong),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(icon, contentDescription = null, tint = p.text, modifier = Modifier.size(18.dp))
-            }
+            Icon(icon, contentDescription = null, tint = ink, modifier = Modifier.size(19.dp))
         }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, color = p.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.1).sp)
-            if (subtitle != null) {
-                Text(subtitle, color = p.secondary, fontSize = 11.5.sp, modifier = Modifier.padding(top = 1.dp))
-            }
+        Text(
+            text = title,
+            color = ink,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.weight(1f),
+        )
+        if (detail != null) {
+            Text(
+                text = detail,
+                color = subInk,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+            )
         }
-        trailing?.invoke()
     }
 }
 

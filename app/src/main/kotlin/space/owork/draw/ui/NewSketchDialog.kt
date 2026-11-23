@@ -31,7 +31,7 @@ import space.owork.draw.engine.CanvasMode
 import space.owork.draw.engine.CanvasPreset
 import space.owork.draw.engine.CanvasPresets
 import space.owork.draw.ui.theme.LocalGlass
-import space.owork.draw.ui.theme.glass
+import space.owork.draw.ui.theme.glassSurface
 
 private enum class NewCanvasTab(val label: String) {
     INFINITE("Infinite Canvas"),
@@ -90,7 +90,7 @@ fun NewSketchDialog(
                         val shape = RoundedCornerShape(14.dp)
                         Column(
                             modifier = Modifier
-                                .glass(shape, p, fill = if (selected) p.active else p.glass, edge = !selected)
+                                .glassSurface(shape, p, fill = if (selected) p.active else p.glass, bordered = false)
                                 .clickable(
                                     interactionSource = remember { MutableInteractionSource() },
                                     indication = null,

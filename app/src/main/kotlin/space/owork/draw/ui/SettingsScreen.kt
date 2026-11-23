@@ -1,5 +1,6 @@
 package space.owork.draw.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,19 +22,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.Tune
-import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import space.owork.draw.R
 import space.owork.draw.engine.AntiAliasingMode
 import space.owork.draw.engine.AppSettings
 import space.owork.draw.engine.AppTheme
@@ -41,11 +41,11 @@ import space.owork.draw.engine.BackgroundPattern
 import space.owork.draw.engine.CanvasLockMode
 import space.owork.draw.engine.StrokeSmoothingLevel
 import space.owork.draw.ui.theme.LocalGlass
-import space.owork.draw.ui.theme.glass
+import space.owork.draw.ui.theme.glassSurface
 import kotlin.math.roundToInt
 
 /**
- * tvOS/iPadOS-inspired two-column glass Settings screen.
+ * tvOS/iPadOS-inspired two-column Settings screen.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -68,7 +68,7 @@ fun SettingsScreen(
                 .padding(horizontal = 28.dp, vertical = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(32.dp),
         ) {
-            // Left hero column (tvOS Settings pattern)
+            // Left hero column with sculpted opaque Drawspace icon (no transparent-shadow bleed)
             Column(
                 modifier = Modifier
                     .weight(0.34f)
@@ -103,44 +103,39 @@ fun SettingsScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
-                        val iconShape = RoundedCornerShape(34.dp)
+                        val iconShape = RoundedCornerShape(30.dp)
                         Box(
                             modifier = Modifier
-                                .size(116.dp)
-                                .shadow(28.dp, iconShape, clip = false)
-                                .glass(iconShape, p, fill = Color.Transparent)
-                                .background(
-                                    Brush.linearGradient(
-                                        listOf(
-                                            p.glassStrong,
-                                            p.glass.copy(alpha = p.glass.alpha * 0.4f),
-                                        ),
-                                    ),
-                                ),
-                            contentAlignment = Alignment.Center,
+                                .size(112.dp)
+                                .shadow(if (p.isDark) 24.dp else 14.dp, iconShape, clip = false)
+                                .clip(iconShape),
                         ) {
-                            Icon(
-                                Icons.Outlined.Tune,
+                            Image(
+                                painter = painterResource(R.drawable.ic_launcher_background),
                                 contentDescription = null,
-                                tint = p.text,
-                                modifier = Modifier.size(52.dp),
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                            Image(
+                                painter = painterResource(R.drawable.ic_launcher_foreground),
+                                contentDescription = "Drawspace",
+                                modifier = Modifier.fillMaxSize(),
                             )
                         }
                         Text(
-                            text = "Drawspace Studio",
+                            text = "Drawspace",
                             color = p.text,
-                            fontSize = 18.sp,
+                            fontSize = 19.sp,
                             fontWeight = FontWeight.SemiBold,
-                            letterSpacing = (-0.25).sp,
+                            letterSpacing = (-0.3).sp,
                             textAlign = TextAlign.Center,
                         )
                         Text(
-                            text = "Monochrome glass chrome, GLES 3.0 ink rendering, stylus defaults, and new-canvas presets.",
+                            text = "GLES 3.0 ink rendering, stylus defaults, and canvas presets.",
                             color = p.secondary,
                             fontSize = 13.sp,
                             lineHeight = 19.sp,
                             textAlign = TextAlign.Center,
-                            modifier = Modifier.widthIn(max = 260.dp),
+                            modifier = Modifier.widthIn(max = 250.dp),
                         )
                     }
                 }
@@ -339,7 +334,7 @@ private fun GlassSettingsCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .glass(shape, p, fill = p.elevated, edge = true)
+            .glassSurface(shape, p, fill = p.elevated, bordered = true)
             .padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {

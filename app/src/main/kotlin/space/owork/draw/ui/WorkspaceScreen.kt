@@ -47,7 +47,7 @@ import space.owork.draw.engine.AppTheme
 import space.owork.draw.engine.CanvasMode
 import space.owork.draw.storage.DocumentSummary
 import space.owork.draw.ui.theme.LocalGlass
-import space.owork.draw.ui.theme.glass
+import space.owork.draw.ui.theme.glassSurface
 import java.text.DateFormat
 import java.util.Date
 
@@ -215,8 +215,8 @@ private fun DocumentCard(
 
     Column(
         modifier = Modifier
-            .shadow(elevation = if (p.isDark) 18.dp else 8.dp, shape = cardShape, clip = false)
-            .glass(cardShape, p, fill = p.elevated, edge = true)
+            .shadow(elevation = if (p.isDark) 16.dp else 6.dp, shape = cardShape, clip = false)
+            .glassSurface(cardShape, p, fill = p.elevated, bordered = true)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
