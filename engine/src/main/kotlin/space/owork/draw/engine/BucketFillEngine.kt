@@ -25,7 +25,8 @@ sealed interface BucketFillResult {
  */
 object BucketFillEngine {
 
-    private const val MAX_GRID_DIM = 1024
+    private const val MAX_LOCAL_GRID_DIM = 1024
+    private const val MAX_FALLBACK_GRID_DIM = 1920
     private const val FILL_TAG_BIT = 0x01000000
     private const val LINE_BARRIER_BIT = 0x02000000
 
@@ -56,6 +57,7 @@ object BucketFillEngine {
                     seedWorldX = worldX,
                     seedWorldY = worldY,
                     fillBrush = fillBrush,
+                    maxGridDim = MAX_LOCAL_GRID_DIM,
                     allowBoundaryTouch = fixedBounds != null && rectMatches(localRect, fixedBounds),
                 )
                 if (localAttempt !is BucketFillResult.OpenRegion) {
@@ -64,7 +66,7 @@ object BucketFillEngine {
             }
         }
 
-        // Fall back to full artboard (Fixed-Size) or full stroke-content bounds (Infinite).
+        // Fall back to full artboard (Fixed-Size, 1:1 up to 1920px) or full stroke bounds (Infinite).
         val fallbackRect = if (fixedBounds != null) {
             fixedBounds
         } else {
@@ -77,6 +79,7 @@ object BucketFillEngine {
             seedWorldX = worldX,
             seedWorldY = worldY,
             fillBrush = fillBrush,
+            maxGridDim = if (fixedBounds != null) MAX_FALLBACK_GRID_DIM else MAX_LOCAL_GRID_DIM,
             allowBoundaryTouch = fixedBounds != null,
         )
     }
@@ -87,13 +90,14 @@ object BucketFillEngine {
         seedWorldX: Float,
         seedWorldY: Float,
         fillBrush: BrushSpec,
+        maxGridDim: Int,
         allowBoundaryTouch: Boolean,
     ): BucketFillResult {
         val worldW = workRect.width.coerceAtLeast(1f)
         val worldH = workRect.height.coerceAtLeast(1f)
-        val cellSize = max(worldW, worldH) / MAX_GRID_DIM.toFloat()
-        val gridW = ceil(worldW / cellSize).toInt().coerceIn(8, MAX_GRID_DIM)
-        val gridH = ceil(worldH / cellSize).toInt().coerceIn(8, MAX_GRID_DIM)
+        val cellSize = max(worldW, worldH) / maxGridDim.toFloat()
+        val gridW = ceil(worldW / cellSize).toInt().coerceIn(8, maxGridDim)
+        val gridH = ceil(worldH / cellSize).toInt().coerceIn(8, maxGridDim)
 
         val seedX = ((seedWorldX - workRect.left) / cellSize).toInt().coerceIn(0, gridW - 1)
         val seedY = ((seedWorldY - workRect.top) / cellSize).toInt().coerceIn(0, gridH - 1)
@@ -191,8 +195,8 @@ object BucketFillEngine {
             return BucketFillResult.OpenRegion
         }
 
-        // Tuck 1 cell strictly into surrounding LINE_BARRIER pixels so the fill sits cleanly
-        // underneath the anti-aliased stroke edge with zero gaps and zero bleed-through.
+        // Tuck 1 cell (8-connected) strictly into surrounding LINE_BARRIER pixels so fills meet
+        // both orthogonal and diagonal strokes cleanly underneath the outline with zero micro-gaps.
         val tucked = dilateIntoLineBarriers(filled, grid, gridW, gridH)
 
         // Convert filled boolean mask into vertically merged world-space rectangles.
@@ -235,11 +239,21 @@ object BucketFillEngine {
                 val idx = rowOff + x
                 if (filled[idx]) continue
                 if ((grid[idx] and LINE_BARRIER_BIT) == 0) continue
-                val touchesFill =
-                    (x > 0 && filled[idx - 1]) ||
-                        (x < gridW - 1 && filled[idx + 1]) ||
-                        (y > 0 && filled[idx - gridW]) ||
-                        (y < gridH - 1 && filled[idx + gridW])
+                // Check all 8 neighbors so diagonal edges never leave tiny corner pinholes.
+                var touchesFill = false
+                val minNy = (y - 1).coerceAtLeast(0)
+                val maxNy = (y + 1).coerceAtMost(gridH - 1)
+                val minNx = (x - 1).coerceAtLeast(0)
+                val maxNx = (x + 1).coerceAtMost(gridW - 1)
+                outer@ for (ny in minNy..maxNy) {
+                    val nRow = ny * gridW
+                    for (nx in minNx..maxNx) {
+                        if (filled[nRow + nx]) {
+                            touchesFill = true
+                            break@outer
+                        }
+                    }
+                }
                 if (touchesFill) {
                     out[idx] = true
                 }
@@ -255,7 +269,7 @@ object BucketFillEngine {
         workRect: WorldRect,
         cellSize: Float,
     ): List<WorldRect> {
-        val tuck = cellSize * 0.25f
+        val tuck = cellSize * 0.35f
         // Track active spans from the previous row: key = (startX shl 16) or endX -> ActiveRect
         data class ActiveSpan(val x0: Int, val x1: Int, val y0: Int, var y1: Int)
         var prevActive = HashMap<Int, ActiveSpan>()
@@ -335,12 +349,21 @@ object BucketFillEngine {
     ) {
         val pts = stroke.points
         val brush = stroke.brush
-        val baseRadiusCells = max(brush.sizeWorldPx * 0.48f / cellSize, 1.35f)
+        // Rasterize slightly narrower than the rendered stroke (0.34x diameter) so fills tuck well
+        // underneath the anti-aliased edge, and use 4-connected supercover stepping for hairlines
+        // so thin strokes stay 100% watertight without bloating into giant multi-pixel barriers.
+        val baseRadiusCells = brush.sizeWorldPx * 0.34f / cellSize
 
         fun stampDisc(gx: Float, gy: Float, rCells: Float) {
-            val ri = ceil(rCells).toInt()
             val cx = gx.roundToInt()
             val cy = gy.roundToInt()
+            if (rCells <= 0.65f) {
+                if (cx in 0 until gridW && cy in 0 until gridH) {
+                    grid[cy * gridW + cx] = tag
+                }
+                return
+            }
+            val ri = ceil(rCells).toInt()
             val rSq = rCells * rCells
             val minY = (cy - ri).coerceAtLeast(0)
             val maxY = (cy + ri).coerceAtMost(gridH - 1)
@@ -371,13 +394,29 @@ object BucketFillEngine {
             val bx = (b.x - workRect.left) / cellSize
             val by = (b.y - workRect.top) / cellSize
             val dist = hypot(bx - ax, by - ay)
-            val steps = ceil(dist / max(baseRadiusCells * 0.45f, 0.6f)).toInt().coerceAtLeast(1)
             val avgP = (a.pressure + b.pressure) * 0.5f
             val pFactor = (1f - brush.pressureSizeSensitivity) + brush.pressureSizeSensitivity * avgP.coerceIn(0.1f, 1.3f)
-            val rCells = max(brush.sizeWorldPx * pFactor * 0.48f / cellSize, 1.35f)
+            val rCells = brush.sizeWorldPx * pFactor * 0.34f / cellSize
+            val stepLen = if (rCells <= 0.65f) 0.4f else max(rCells * 0.45f, 0.45f)
+            val steps = ceil(dist / stepLen).toInt().coerceAtLeast(1)
+
+            var prevCx = ax.roundToInt()
+            var prevCy = ay.roundToInt()
             for (s in 0..steps) {
                 val t = s.toFloat() / steps
-                stampDisc(ax + (bx - ax) * t, ay + (by - ay) * t, rCells)
+                val gx = ax + (bx - ax) * t
+                val gy = ay + (by - ay) * t
+                val cx = gx.roundToInt()
+                val cy = gy.roundToInt()
+                // Supercover orthogonal bridge when a hairline steps diagonally so 4-connected BFS never leaks
+                if (rCells <= 0.65f && cx != prevCx && cy != prevCy) {
+                    if (prevCx in 0 until gridW && cy in 0 until gridH) {
+                        grid[cy * gridW + prevCx] = tag
+                    }
+                }
+                stampDisc(gx, gy, rCells)
+                prevCx = cx
+                prevCy = cy
             }
         }
     }
