@@ -85,8 +85,9 @@ sealed interface Layer {
         val strokes: List<Stroke> = emptyList(),
         val tombstones: Set<String> = emptySet(),
     ) : Layer {
-        val activeStrokes: List<Stroke>
-            get() = if (tombstones.isEmpty()) strokes else strokes.filterNot { it.id in tombstones }
+        val activeStrokes: List<Stroke> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+            if (tombstones.isEmpty()) strokes else strokes.filterNot { it.id in tombstones }
+        }
 
         override fun toMeta(): LayerMeta = LayerMeta(
             id = id,

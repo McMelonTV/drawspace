@@ -215,4 +215,29 @@ class GitWorkspaceStoreTest {
             assertEquals(0, reopened.visibleStrokes().size)
         }
     }
+
+    @Test
+    fun `two store instances on same workspace serialize without OverlappingFileLockException`() = runTest {
+        val dir = tempFolder.newFolder("ws_two_instances")
+        GitWorkspaceStore(dir).use { storeA ->
+            GitWorkspaceStore(dir).use { storeB ->
+                storeA.initialize()
+                storeB.initialize()
+                val doc = storeA.createDocument("Shared", CanvasMode.Infinite)
+                val layerId = doc.primaryStrokeLayer().id
+
+                val jobs = (1..12).map { i ->
+                    async {
+                        val target = if (i % 2 == 0) storeA else storeB
+                        val stroke = Stroke(brush = BrushSpec.defaultFor(ToolType.PEN), points = listOf(StrokePoint(i.toFloat(), 0f)))
+                        val (_, delta) = DocumentCommand.AddStroke(layerId, stroke).apply(doc)
+                        target.flushDeltas(doc.id, listOf(delta))
+                        target.listDocuments()
+                    }
+                }
+                jobs.awaitAll()
+                assertTrue(storeA.verifyIntegrity())
+            }
+        }
+    }
 }

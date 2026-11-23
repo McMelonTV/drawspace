@@ -42,8 +42,47 @@ internal class AtomicWal(
 
     fun appendDelta(documentId: String, delta: DocumentDelta) {
         if (delta.isEmpty) return
-        val existing = readDeltas(documentId)
-        writeAllAtomic(documentId, existing + delta)
+        appendDeltas(documentId, listOf(delta))
+    }
+
+    fun appendDeltas(documentId: String, deltas: List<DocumentDelta>) {
+        val nonEmpty = deltas.filterNot { it.isEmpty }
+        if (nonEmpty.isEmpty()) return
+        walDir.mkdirs()
+        val target = walFile(documentId)
+        val tmp = File(walDir, "$documentId.wal.tmp")
+
+        val existingBytes = if (target.exists() && target.length() > 0L) target.readBytes() else ByteArray(0)
+        val newLines = buildString {
+            for (d in nonEmpty) {
+                append(DocumentCodec.compactJson.encodeToString(d))
+                append('\n')
+            }
+        }.encodeToByteArray()
+
+        FileChannel.open(
+            tmp.toPath(),
+            StandardOpenOption.CREATE,
+            StandardOpenOption.WRITE,
+            StandardOpenOption.TRUNCATE_EXISTING,
+        ).use { ch ->
+            if (existingBytes.isNotEmpty()) {
+                writeFully(ch, existingBytes)
+            }
+            writeFully(ch, newLines)
+            ch.force(true)
+        }
+
+        try {
+            Files.move(
+                tmp.toPath(),
+                target.toPath(),
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING,
+            )
+        } catch (_: UnsupportedOperationException) {
+            Files.move(tmp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        }
     }
 
     fun readDeltas(documentId: String): List<DocumentDelta> {
@@ -91,39 +130,10 @@ internal class AtomicWal(
         return if (delta.undoStack != null) updated.copy(undoStack = delta.undoStack!!) else updated
     }
 
-    private fun writeAllAtomic(documentId: String, deltas: List<DocumentDelta>) {
-        walDir.mkdirs()
-        val target = walFile(documentId)
-        val tmp = File(walDir, "$documentId.wal.tmp")
-        val payload = buildString {
-            for (d in deltas) {
-                append(DocumentCodec.compactJson.encodeToString(d))
-                append('\n')
-            }
-        }.encodeToByteArray()
-
-        FileChannel.open(
-            tmp.toPath(),
-            StandardOpenOption.CREATE,
-            StandardOpenOption.WRITE,
-            StandardOpenOption.TRUNCATE_EXISTING,
-        ).use { ch ->
-            val buf = ByteBuffer.wrap(payload)
-            while (buf.hasRemaining()) {
-                ch.write(buf)
-            }
-            ch.force(true)
-        }
-
-        try {
-            Files.move(
-                tmp.toPath(),
-                target.toPath(),
-                StandardCopyOption.ATOMIC_MOVE,
-                StandardCopyOption.REPLACE_EXISTING,
-            )
-        } catch (_: UnsupportedOperationException) {
-            Files.move(tmp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+    private fun writeFully(ch: FileChannel, bytes: ByteArray) {
+        val buf = ByteBuffer.wrap(bytes)
+        while (buf.hasRemaining()) {
+            ch.write(buf)
         }
     }
 }

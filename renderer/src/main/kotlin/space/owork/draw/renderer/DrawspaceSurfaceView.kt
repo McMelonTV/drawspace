@@ -38,6 +38,7 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
 
     private val documentRef = AtomicReference<Document?>(null)
     private val pendingStrokesRef = AtomicReference<List<Stroke>>(emptyList())
+    private val pendingErasedIdsRef = AtomicReference<Set<String>>(emptySet())
     private val cameraRef = AtomicReference(ViewportCamera())
     private val cameraLocksRef = AtomicReference(CameraLocks())
     private val brushRef = AtomicReference(BrushSpec.defaultFor(space.owork.draw.engine.ToolType.PEN))
@@ -97,6 +98,7 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
                 bufferTransform = transform,
                 document = doc,
                 pendingStrokes = pendingStrokesRef.get(),
+                pendingErasedIds = pendingErasedIdsRef.get(),
                 camera = cameraRef.get(),
                 appTheme = themeRef.get(),
                 antiAliasing = aaModeRef.get(),
@@ -153,15 +155,17 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
                     }
                 }
                 if (newlyHit) {
-                    listener?.onStrokesErased(erasedInGesture.toList())
-                    erasedInGesture.clear()
+                    // Hide erased strokes immediately on GPU, then emit 1 single undoable batch on lift.
+                    pendingErasedIdsRef.set(erasedInGesture.toSet())
+                    requestFullRedraw()
                 }
             }
 
             override fun onEraseFinished() {
                 if (erasedInGesture.isNotEmpty()) {
-                    listener?.onStrokesErased(erasedInGesture.toList())
+                    val batch = erasedInGesture.toList()
                     erasedInGesture.clear()
+                    listener?.onStrokesErased(batch)
                 }
             }
 
@@ -178,18 +182,25 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
     }
 
     fun setDocument(document: Document) {
-        val prev = documentRef.getAndSet(document)
-        // Drop pending strokes that are now reflected in the authoritative Document snapshot.
-        val committedIds = document.primaryStrokeLayer().strokes.mapTo(HashSet()) { it.id }
-        pendingStrokesRef.updateAndGet { list -> list.filterNot { it.id in committedIds } }
+        val current = documentRef.get()
+        if (current === document) return
+        documentRef.set(document)
 
-        val isNewDoc = prev?.id != document.id
+        // Drop pending strokes/erasures that are now reflected in the authoritative Document snapshot.
+        if (pendingStrokesRef.get().isNotEmpty()) {
+            val committedIds = document.primaryStrokeLayer().strokes.mapTo(HashSet()) { it.id }
+            pendingStrokesRef.updateAndGet { list -> list.filterNot { it.id in committedIds } }
+        }
+        if (pendingErasedIdsRef.get().isNotEmpty() && erasedInGesture.isEmpty()) {
+            val tombstones = document.primaryStrokeLayer().tombstones
+            pendingErasedIdsRef.updateAndGet { set -> set.filterNotTo(HashSet()) { it in tombstones } }
+        }
+
+        val isNewDoc = current?.id != document.id
         if (isNewDoc && width > 0 && height > 0) {
             fitDocumentToViewport(document)
         }
-        if (prev !== document) {
-            requestFullRedraw()
-        }
+        requestFullRedraw()
     }
 
     fun setBrush(brush: BrushSpec) {
@@ -256,8 +267,10 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         val doc = documentRef.get()
-        if (doc != null && w > 0 && h > 0 && hasInitializedCameraForDocId != doc.id) {
-            fitDocumentToViewport(doc)
+        if (doc != null && w > 0 && h > 0) {
+            if (hasInitializedCameraForDocId != doc.id) {
+                fitDocumentToViewport(doc)
+            }
             requestFullRedraw()
         }
     }

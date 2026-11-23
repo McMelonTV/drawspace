@@ -19,24 +19,19 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.AccountTree
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.AllInclusive
 import androidx.compose.material.icons.outlined.CropLandscape
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -64,15 +59,9 @@ fun WorkspaceScreen(
     onOpenDocument: (String) -> Unit,
     onCreateDocument: (String, CanvasMode) -> Unit,
     onDeleteDocument: (String) -> Unit,
-    onCreateVariation: (String) -> Unit,
-    onSwitchVariation: (String) -> Unit,
 ) {
     var showNewDialog by remember { mutableStateOf(false) }
-    var showVariationMenu by remember { mutableStateOf(false) }
-    var showNewVariationDialog by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<DocumentSummary?>(null) }
-
-    val currentVariation = state.variations.firstOrNull { it.isCurrent }?.name ?: "main"
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -95,7 +84,7 @@ fun WorkspaceScreen(
                         style = MaterialTheme.typography.headlineMedium,
                     )
                     Text(
-                        text = "${state.documents.size} sketch${if (state.documents.size == 1) "" else "es"} · versioned workspace",
+                        text = "${state.documents.size} sketch${if (state.documents.size == 1) "" else "es"}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -105,41 +94,6 @@ fun WorkspaceScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Box {
-                        AssistChip(
-                            onClick = { showVariationMenu = true },
-                            label = { Text("Variation: $currentVariation") },
-                            leadingIcon = {
-                                Icon(
-                                    Icons.Outlined.AccountTree,
-                                    contentDescription = "Workspace variation",
-                                    modifier = Modifier.size(18.dp),
-                                )
-                            },
-                        )
-                        DropdownMenu(
-                            expanded = showVariationMenu,
-                            onDismissRequest = { showVariationMenu = false },
-                        ) {
-                            state.variations.forEach { v ->
-                                DropdownMenuItem(
-                                    text = { Text(if (v.isCurrent) "• ${v.name}" else v.name) },
-                                    onClick = {
-                                        showVariationMenu = false
-                                        if (!v.isCurrent) onSwitchVariation(v.name)
-                                    },
-                                )
-                            }
-                            DropdownMenuItem(
-                                text = { Text("+ New Variation…") },
-                                onClick = {
-                                    showVariationMenu = false
-                                    showNewVariationDialog = true
-                                },
-                            )
-                        }
-                    }
-
                     FilledTonalButton(
                         onClick = { onCreateDocument("Unnamed Sketch", CanvasMode.Infinite) },
                     ) {
@@ -220,40 +174,11 @@ fun WorkspaceScreen(
         )
     }
 
-    if (showNewVariationDialog) {
-        var name by remember { mutableStateOf("") }
-        AlertDialog(
-            onDismissRequest = { showNewVariationDialog = false },
-            title = { Text("Create Workspace Variation") },
-            text = {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Variation name") },
-                    placeholder = { Text("color-study") },
-                    singleLine = true,
-                )
-            },
-            confirmButton = {
-                Button(
-                    enabled = name.isNotBlank(),
-                    onClick = {
-                        showNewVariationDialog = false
-                        onCreateVariation(name)
-                    },
-                ) { Text("Create") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showNewVariationDialog = false }) { Text("Cancel") }
-            },
-        )
-    }
-
     pendingDelete?.let { doc ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
             title = { Text("Delete \"${doc.meta.title}\"?") },
-            text = { Text("This removes the sketch from the current variation. Earlier checkpoints remain in workspace history.") },
+            text = { Text("This removes the sketch from your workspace.") },
             confirmButton = {
                 Button(
                     onClick = {

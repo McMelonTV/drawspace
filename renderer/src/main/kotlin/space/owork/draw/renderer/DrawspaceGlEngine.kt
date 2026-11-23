@@ -154,6 +154,7 @@ internal class DrawspaceGlEngine {
         bufferTransform: FloatArray,
         document: Document,
         pendingStrokes: List<Stroke>,
+        pendingErasedIds: Set<String>,
         camera: ViewportCamera,
         appTheme: AppTheme,
         antiAliasing: AntiAliasingMode,
@@ -177,6 +178,7 @@ internal class DrawspaceGlEngine {
                 bufferTransform = bufferTransform,
                 document = document,
                 pendingStrokes = pendingStrokes,
+                pendingErasedIds = pendingErasedIds,
                 camera = camera,
                 appTheme = appTheme,
                 aaFeatherPx = antiAliasing.featherPx,
@@ -211,6 +213,7 @@ internal class DrawspaceGlEngine {
                 bufferTransform = bufferTransform,
                 document = document,
                 pendingStrokes = pendingStrokes,
+                pendingErasedIds = pendingErasedIds,
                 camera = camera,
                 appTheme = appTheme,
                 aaFeatherPx = antiAliasing.featherPx,
@@ -229,6 +232,7 @@ internal class DrawspaceGlEngine {
         bufferTransform: FloatArray,
         document: Document,
         pendingStrokes: List<Stroke>,
+        pendingErasedIds: Set<String>,
         camera: ViewportCamera,
         appTheme: AppTheme,
         aaFeatherPx: Float,
@@ -246,16 +250,16 @@ internal class DrawspaceGlEngine {
         drawBackdrop(bufferWidth, bufferHeight, pixelScale, bufferTransform, document, camera, appTheme)
 
         val docStrokes = document.visibleStrokes()
-        val strokes = if (pendingStrokes.isEmpty()) {
+        val strokes = if (pendingStrokes.isEmpty() && pendingErasedIds.isEmpty()) {
             docStrokes
         } else {
             val seen = HashSet<String>(docStrokes.size + pendingStrokes.size)
             val combined = ArrayList<Stroke>(docStrokes.size + pendingStrokes.size)
             for (s in docStrokes) {
-                if (seen.add(s.id)) combined.add(s)
+                if (s.id !in pendingErasedIds && seen.add(s.id)) combined.add(s)
             }
             for (s in pendingStrokes) {
-                if (seen.add(s.id)) combined.add(s)
+                if (s.id !in pendingErasedIds && seen.add(s.id)) combined.add(s)
             }
             combined
         }

@@ -1,4 +1,44 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="14" fill="#7c3aed"/>
-  <text x="32" y="32" dy="0.35em" text-anchor="middle" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="32" font-weight="600" fill="#ffffff">D</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#141724"/>
+      <stop offset="55%" stop-color="#1C2137"/>
+      <stop offset="100%" stop-color="#252042"/>
+    </linearGradient>
+    <linearGradient id="ink" x1="22" y1="78" x2="56" y2="62" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#9E7BFF"/>
+      <stop offset="55%" stop-color="#6DA8FF"/>
+      <stop offset="100%" stop-color="#D2E6FF"/>
+    </linearGradient>
+    <linearGradient id="barrel" x1="0" y1="-6.5" x2="0" y2="6.5" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="45%" stop-color="#E7EDF9"/>
+      <stop offset="100%" stop-color="#B0BEDB"/>
+    </linearGradient>
+    <linearGradient id="collar" x1="0" y1="-6.5" x2="0" y2="6.5" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#7CB0FF"/>
+      <stop offset="55%" stop-color="#4F82EE"/>
+      <stop offset="100%" stop-color="#355FC2"/>
+    </linearGradient>
+    <linearGradient id="tip" x1="0" y1="-5" x2="0" y2="5" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#D5E3FF"/>
+      <stop offset="100%" stop-color="#87A6E6"/>
+    </linearGradient>
+  </defs>
+  <rect width="108" height="108" rx="24" fill="url(#bg)"/>
+  <g fill="#8AB4F8" opacity="0.20">
+    <circle cx="24" cy="24" r="1.35"/><circle cx="44" cy="24" r="1.35"/><circle cx="64" cy="24" r="1.35"/><circle cx="84" cy="24" r="1.35"/>
+    <circle cx="24" cy="44" r="1.35"/><circle cx="44" cy="44" r="1.35"/><circle cx="64" cy="44" r="1.35"/><circle cx="84" cy="44" r="1.35"/>
+    <circle cx="24" cy="64" r="1.35"/><circle cx="44" cy="64" r="1.35"/><circle cx="64" cy="64" r="1.35"/><circle cx="84" cy="64" r="1.35"/>
+    <circle cx="24" cy="84" r="1.35"/><circle cx="44" cy="84" r="1.35"/><circle cx="64" cy="84" r="1.35"/><circle cx="84" cy="84" r="1.35"/>
+  </g>
+  <path d="M25.5,76.5 C21.5,64.5 28.5,51.0 39.2,52.0 C46.0,52.6 44.8,63.2 49.0,64.6 C50.8,65.2 52.6,64.5 54.0,63.2 C52.2,67.2 47.6,70.2 43.2,68.2 C39.0,66.2 41.2,58.0 36.8,57.8 C31.4,57.5 28.6,67.0 30.2,74.2 C30.8,76.8 26.8,78.6 25.5,76.5 Z" fill="url(#ink)"/>
+  <g transform="translate(53, 64) rotate(-45)">
+    <path d="M0,1.5 C5,-2.5 11,-5.5 18,-5.5 L40,-4.5 C46,-4.2 48,-1 48,1.5 C48,4 46,7.2 40,7.5 L18,8.5 C11,8.5 5,5.5 0,1.5 Z" fill="#080A12" opacity="0.34"/>
+    <path d="M0,0 C4.5,-1.2 10.5,-5.8 18.5,-6.0 C27,-6.2 35,-5.6 41.5,-5.2 C46.2,-4.9 48.2,-2.6 48.2,0 C48.2,2.6 46.2,4.9 41.5,5.2 C35,5.6 27,6.2 18.5,6.0 C10.5,5.8 4.5,1.2 0,0 Z" fill="url(#barrel)"/>
+    <path d="M0,0 C4.2,-1.1 9.5,-5.2 15.8,-5.8 C14.5,-2.5 14.5,2.5 15.8,5.8 C9.5,5.2 4.2,1.1 0,0 Z" fill="url(#tip)"/>
+    <path d="M31.5,-5.7 C33.5,-5.6 35.5,-5.5 37.2,-5.4 C36.2,-2.2 36.2,2.2 37.2,5.4 C35.5,5.5 33.5,5.6 31.5,5.7 C30.5,2.2 30.5,-2.2 31.5,-5.7 Z" fill="url(#collar)"/>
+    <rect x="19.5" y="-2.1" width="7.2" height="2.4" rx="1.2" fill="#9BB3E2" opacity="0.72"/>
+    <circle cx="0.6" cy="0" r="1.5" fill="#FFFFFF"/>
+  </g>
 </svg>

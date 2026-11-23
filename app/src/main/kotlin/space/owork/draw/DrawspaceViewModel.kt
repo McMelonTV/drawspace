@@ -88,6 +88,7 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
     private val pendingDeltas = ArrayList<DocumentDelta>()
     private val inFlightPreviewIds = HashSet<String>()
     private var strokesSinceCheckpoint = 0
+    private var hasDirtyBackground = false
     private var walFlushJob: Job? = null
     private var idleCheckpointJob: Job? = null
     private var backgroundSaveJob: Job? = null
@@ -230,10 +231,12 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
                 saveStatus = "Autosaving…",
             )
         }
+        hasDirtyBackground = true
         backgroundSaveJob?.cancel()
         backgroundSaveJob = viewModelScope.launch {
             delay(800L)
             val latest = _uiState.value.activeDocument ?: return@launch
+            hasDirtyBackground = false
             store.checkpoint(latest, label = "Updated canvas background", isNamedSnapshot = false)
             val history = store.listHistory(latest.id)
             _uiState.update { it.copy(history = history, saveStatus = "Saved") }
@@ -285,6 +288,13 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun onCameraChanged(camera: ViewportCamera) {
+        val current = _uiState.value
+        val prevZoomPct = kotlin.math.round(current.cameraZoom * 100f).toInt()
+        val nextZoomPct = kotlin.math.round(camera.zoom * 100f).toInt()
+        val prevRotated = kotlin.math.abs(current.cameraRotationRad) > 0.02f
+        val nextRotated = kotlin.math.abs(camera.rotationRad) > 0.02f
+        // Avoid triggering Compose recompositions at 90Hz during pure pan when HUD indicators haven't changed.
+        if (prevZoomPct == nextZoomPct && prevRotated == nextRotated) return
         _uiState.update { it.copy(cameraZoom = camera.zoom, cameraRotationRad = camera.rotationRad) }
     }
 
@@ -483,19 +493,21 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
     private suspend fun flushPendingWal(docId: String) {
         val batch = ArrayList(pendingDeltas)
         pendingDeltas.clear()
-        for (d in batch) {
-            store.flushDelta(docId, d)
+        if (batch.isNotEmpty()) {
+            store.flushDeltas(docId, batch)
         }
         _uiState.update { it.copy(saveStatus = "Saved") }
     }
 
     private suspend fun checkpointIfDirty(label: String?, isNamed: Boolean) {
         val doc = _uiState.value.activeDocument ?: return
-        if (strokesSinceCheckpoint == 0 && pendingDeltas.isEmpty() && !isNamed) return
+        if (strokesSinceCheckpoint == 0 && pendingDeltas.isEmpty() && !hasDirtyBackground && !isNamed) return
         walFlushJob?.cancel()
         idleCheckpointJob?.cancel()
+        backgroundSaveJob?.cancel()
         pendingDeltas.clear()
         strokesSinceCheckpoint = 0
+        hasDirtyBackground = false
         store.checkpoint(doc, label = label, isNamedSnapshot = isNamed)
         val history = store.listHistory(doc.id)
         _uiState.update { it.copy(history = history, saveStatus = "Checkpointed") }

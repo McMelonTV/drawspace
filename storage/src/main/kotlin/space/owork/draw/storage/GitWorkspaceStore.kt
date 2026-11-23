@@ -32,6 +32,7 @@ import java.io.File
 import java.io.RandomAccessFile
 import java.time.Instant
 import java.time.ZoneOffset
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Corruption-hardened Git-native [WorkspaceStore] backed by a bare JGit repository.
@@ -53,7 +54,8 @@ class GitWorkspaceStore(
 ) : WorkspaceStore {
 
     private val ioDispatcher = dispatcher
-    private val mutex = Mutex()
+    private val canonicalPathKey: String = runCatching { workspaceDir.canonicalPath }.getOrElse { workspaceDir.absolutePath }
+    private val mutex: Mutex = processLocks.computeIfAbsent(canonicalPathKey) { Mutex() }
     private val gitDir = File(workspaceDir, "repo.git")
     private val lockFile = File(workspaceDir, ".workspace.lock")
     private val wal = AtomicWal(File(workspaceDir, "wal"))
@@ -135,6 +137,10 @@ class GitWorkspaceStore(
 
     override suspend fun flushDelta(documentId: String, delta: DocumentDelta) = withRepoLock {
         wal.appendDelta(documentId, delta)
+    }
+
+    override suspend fun flushDeltas(documentId: String, deltas: List<DocumentDelta>) = withRepoLock {
+        wal.appendDeltas(documentId, deltas)
     }
 
     override suspend fun checkpoint(
@@ -579,6 +585,7 @@ class GitWorkspaceStore(
     }
 
     companion object {
+        private val processLocks = ConcurrentHashMap<String, Mutex>()
         private const val DEFAULT_BRANCH_REF = "refs/heads/main"
         private const val BACKUP_LAST_GOOD_REF = "refs/backup/last-good"
         private const val ROOT_README = "README.md"

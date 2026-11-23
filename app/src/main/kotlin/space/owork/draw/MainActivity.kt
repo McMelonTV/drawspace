@@ -118,8 +118,6 @@ class MainActivity : ComponentActivity() {
                                 onOpenDocument = viewModel::openDocument,
                                 onCreateDocument = viewModel::createAndOpenDocument,
                                 onDeleteDocument = viewModel::deleteDocument,
-                                onCreateVariation = viewModel::createVariation,
-                                onSwitchVariation = viewModel::switchVariation,
                             )
                         }
                     }

@@ -53,6 +53,11 @@ interface WorkspaceStore : AutoCloseable {
     suspend fun flushDelta(documentId: String, delta: DocumentDelta)
 
     /**
+     * Batched crash-safe working save: writes all pending deltas in a single fsync + atomic rename.
+     */
+    suspend fun flushDeltas(documentId: String, deltas: List<DocumentDelta>)
+
+    /**
      * Commits the current document state into immutable Git history, updates `preview.svg` and
      * GitHub navigation `README.md`s, and clears the WAL.
      */
