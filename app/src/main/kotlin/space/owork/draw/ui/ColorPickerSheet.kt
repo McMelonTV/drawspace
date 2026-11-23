@@ -28,12 +28,10 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.RestartAlt
 import androidx.compose.material3.Button
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -57,7 +55,7 @@ import space.owork.draw.engine.ColorPalette
 import space.owork.draw.engine.ColorSwatch
 import space.owork.draw.ui.theme.LocalHudColors
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ColorPickerSheet(
     initialColorArgb: Int,
@@ -91,41 +89,34 @@ fun ColorPickerSheet(
         onSelectColor(argb)
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    StudioModal(
+        title = "Color & Palette",
+        onDismiss = onDismiss,
+        maxWidth = 600.dp,
+        maxHeight = 620.dp,
+        headerActions = {
+            Box(
+                modifier = Modifier
+                    .size(30.dp)
+                    .clip(CircleShape)
+                    .background(Color(currentArgb))
+                    .border(2.dp, hudColors.swatchBorder, CircleShape),
+            )
+            FilledTonalButton(
+                onClick = { onAddSwatch(currentArgb) },
+            ) {
+                Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Save Swatch")
+            }
+        },
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 24.dp, vertical = 8.dp),
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text("Color & Palette", style = MaterialTheme.typography.titleLarge)
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    // Live current color preview pill
-                    Box(
-                        modifier = Modifier
-                            .size(34.dp)
-                            .clip(CircleShape)
-                            .background(Color(currentArgb))
-                            .border(2.dp, hudColors.swatchBorder, CircleShape),
-                    )
-                    FilledTonalButton(
-                        onClick = { onAddSwatch(currentArgb) },
-                    ) {
-                        Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Save Swatch")
-                    }
-                }
-            }
 
             // 2D Saturation / Value picker pad + Hue bar + Hex input
             Row(
@@ -297,8 +288,6 @@ fun ColorPickerSheet(
                     Text("Done")
                 }
             }
-
-            Spacer(Modifier.height(12.dp))
         }
     }
 }
