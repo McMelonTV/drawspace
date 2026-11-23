@@ -2,6 +2,7 @@ package space.owork.draw.storage
 
 import space.owork.draw.engine.CanvasBackground
 import space.owork.draw.engine.CanvasMode
+import space.owork.draw.engine.ColorPalette
 import space.owork.draw.engine.Document
 import space.owork.draw.engine.DocumentDelta
 import space.owork.draw.engine.DocumentMeta
@@ -72,6 +73,10 @@ interface WorkspaceStore : AutoCloseable {
     suspend fun loadDocumentAtCheckpoint(documentId: String, checkpointId: String): Document
 
     suspend fun deleteDocument(documentId: String)
+
+    suspend fun loadWorkspacePalette(): ColorPalette
+
+    suspend fun saveWorkspacePalette(palette: ColorPalette)
 
     suspend fun listVariations(): List<VariationInfo>
 

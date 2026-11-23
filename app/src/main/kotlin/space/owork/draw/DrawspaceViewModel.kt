@@ -22,6 +22,7 @@ import space.owork.draw.engine.CanvasBackground
 import space.owork.draw.engine.CanvasLockMode
 import space.owork.draw.engine.CanvasMode
 import space.owork.draw.engine.ColorPalette
+import space.owork.draw.engine.ColorSwatch
 import space.owork.draw.engine.CommandStack
 import space.owork.draw.engine.Document
 import space.owork.draw.engine.DocumentCodec
@@ -111,6 +112,8 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
     init {
         viewModelScope.launch {
             store.initialize()
+            val savedPalette = store.loadWorkspacePalette()
+            _uiState.update { it.copy(palette = savedPalette) }
             refreshWorkspace()
             _uiState.update { it.copy(isLoading = false) }
         }
@@ -251,6 +254,35 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
         _uiState.update { state ->
             val nextTool = if (state.activeTool == ToolType.ERASER) ToolType.PEN else state.activeTool
             state.copy(activeColorArgb = argb, activeTool = nextTool)
+        }
+    }
+
+    fun addColorToPalette(argb: Int) {
+        val current = _uiState.value.palette
+        if (current.swatches.any { it.argb == argb }) {
+            _uiState.update { it.copy(snackbarMessage = "Color already in palette") }
+            return
+        }
+        val hex = "#%06X".format(argb and 0xFFFFFF)
+        val updated = current.copy(swatches = current.swatches + ColorSwatch(hex, argb))
+        persistPalette(updated)
+    }
+
+    fun removeSwatchAt(index: Int) {
+        val current = _uiState.value.palette
+        if (current.swatches.size <= 1 || index !in current.swatches.indices) return
+        val updated = current.copy(swatches = current.swatches.filterIndexed { i, _ -> i != index })
+        persistPalette(updated)
+    }
+
+    fun resetPaletteToDefaults() {
+        persistPalette(ColorPalette())
+    }
+
+    private fun persistPalette(palette: ColorPalette) {
+        _uiState.update { it.copy(palette = palette) }
+        viewModelScope.launch {
+            store.saveWorkspacePalette(palette)
         }
     }
 
@@ -448,7 +480,6 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
         _uiState.update { state ->
             state.copy(
                 activeDocument = doc,
-                palette = doc.meta.palette,
                 allowFingerDrawing = !state.settings.stylusOnlyDefault,
                 lockMode = state.settings.defaultLockMode,
                 activeColorArgb = adaptInkColor(state.activeColorArgb, doc, state.appTheme),

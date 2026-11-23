@@ -30,9 +30,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Redo
 import androidx.compose.material.icons.automirrored.outlined.Undo
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.BorderColor
 import androidx.compose.material.icons.outlined.Brush
 import androidx.compose.material.icons.outlined.CenterFocusStrong
+import androidx.compose.material.icons.outlined.ColorLens
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Draw
 import androidx.compose.material.icons.outlined.Edit
@@ -101,6 +103,9 @@ fun CanvasScreen(
     onRename: (String) -> Unit,
     onSelectTool: (ToolType) -> Unit,
     onSelectColor: (Int) -> Unit,
+    onAddSwatch: (Int) -> Unit,
+    onRemoveSwatch: (Int) -> Unit,
+    onResetPalette: () -> Unit,
     onSizeChange: (Float) -> Unit,
     onOpacityChange: (Float) -> Unit,
     onToggleFingerDrawing: () -> Unit,
@@ -121,6 +126,7 @@ fun CanvasScreen(
     var surfaceRef by remember { mutableStateOf<DrawspaceSurfaceView?>(null) }
     var showHistorySheet by remember { mutableStateOf(false) }
     var showAppearanceSheet by remember { mutableStateOf(false) }
+    var showColorPickerSheet by remember { mutableStateOf(false) }
     var showSnapshotDialog by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
 
@@ -355,6 +361,25 @@ fun CanvasScreen(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 if (state.activeTool != ToolType.ERASER) {
+                    // Active color picker trigger
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(CircleShape)
+                            .background(Color(state.activeColorArgb))
+                            .border(2.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                            .clickable { showColorPickerSheet = true },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        val iconTint = if (CanvasBackground.isColorDark(state.activeColorArgb)) Color.White else Color(0xFF181A1F)
+                        Icon(
+                            Icons.Outlined.ColorLens,
+                            contentDescription = "Open color picker",
+                            tint = iconTint.copy(alpha = 0.85f),
+                            modifier = Modifier.size(16.dp),
+                        )
+                    }
+
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -374,6 +399,23 @@ fun CanvasScreen(
                                     )
                                     .clickable { onSelectColor(swatch.argb) },
                             )
+                        }
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .size(26.dp)
+                                    .clip(CircleShape)
+                                    .border(1.dp, hudColors.swatchBorder, CircleShape)
+                                    .clickable { showColorPickerSheet = true },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    Icons.Outlined.Add,
+                                    contentDescription = "Customize palette",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
                         }
                     }
                 } else {
@@ -424,6 +466,18 @@ fun CanvasScreen(
                 }
             }
         }
+    }
+
+    if (showColorPickerSheet) {
+        ColorPickerSheet(
+            initialColorArgb = state.activeColorArgb,
+            palette = state.palette,
+            onDismiss = { showColorPickerSheet = false },
+            onSelectColor = onSelectColor,
+            onAddSwatch = onAddSwatch,
+            onRemoveSwatch = onRemoveSwatch,
+            onResetPalette = onResetPalette,
+        )
     }
 
     if (showAppearanceSheet) {

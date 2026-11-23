@@ -214,6 +214,30 @@ class GitWorkspaceStore(
         wal.clear(documentId)
     }
 
+    override suspend fun loadWorkspacePalette(): ColorPalette = withRepoLock {
+        val repo = requireRepo()
+        val head = resolveHeadCommit(repo) ?: return@withRepoLock ColorPalette()
+        val files = BareTreeBuilder.readAllBlobIds(repo, head)
+        val paletteId = files[WORKSPACE_PALETTE] ?: return@withRepoLock ColorPalette()
+        runCatching {
+            DocumentCodec.decodePalette(BareTreeBuilder.readBlobBytes(repo, paletteId))
+        }.getOrDefault(ColorPalette())
+    }
+
+    override suspend fun saveWorkspacePalette(palette: ColorPalette) = withRepoLock {
+        val repo = requireRepo()
+        val parent = resolveHeadCommit(repo) ?: return@withRepoLock
+        commitTree(
+            repo = repo,
+            parentId = parent,
+            mutator = { files, insert ->
+                files[WORKSPACE_PALETTE] = insert(DocumentCodec.encodePalette(palette))
+            },
+            message = "Update workspace color palette",
+            timestampMs = System.currentTimeMillis(),
+        )
+    }
+
     override suspend fun listVariations(): List<VariationInfo> = withRepoLock {
         val repo = requireRepo()
         val currentBranch = repo.branch
