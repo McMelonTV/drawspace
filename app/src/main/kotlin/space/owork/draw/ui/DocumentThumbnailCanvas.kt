@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -116,7 +117,8 @@ fun DocumentThumbnailCanvas(
                 )
             }
 
-            // Pass 1: bucket fills behind linework
+            // Pass 1: bucket fills behind linework (unioned into a single Path per fill to prevent AA scanline seams)
+            val fillPath = Path()
             for (stroke in summary.previewStrokes) {
                 if (stroke.brush.tool != ToolType.FILL || stroke.points.isEmpty()) continue
                 val pts = stroke.points
@@ -126,19 +128,17 @@ fun DocumentThumbnailCanvas(
                 } else {
                     Color(stroke.brush.colorArgb).copy(alpha = stroke.brush.opacity.coerceIn(0.08f, 1f))
                 }
+                fillPath.reset()
                 var i = 0
                 while (i + 1 < pts.size) {
-                    val l = originX + pts[i].x * scale
-                    val t = originY + pts[i].y * scale
-                    val r = originX + pts[i + 1].x * scale
-                    val b = originY + pts[i + 1].y * scale
-                    drawRect(
-                        color = strokeColor,
-                        topLeft = Offset(l, t),
-                        size = Size((r - l).coerceAtLeast(0.5f), (b - t).coerceAtLeast(0.5f)),
-                    )
+                    val l = originX + pts[i].x * scale - 0.35f
+                    val t = originY + pts[i].y * scale - 0.35f
+                    val r = originX + pts[i + 1].x * scale + 0.35f
+                    val b = originY + pts[i + 1].y * scale + 0.35f
+                    fillPath.addRect(Rect(l, t, max(r, l + 0.7f), max(b, t + 0.7f)))
                     i += 2
                 }
+                drawPath(path = fillPath, color = strokeColor)
             }
 
             // Pass 2: line & brush strokes on top

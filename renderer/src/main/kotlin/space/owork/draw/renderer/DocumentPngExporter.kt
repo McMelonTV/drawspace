@@ -89,11 +89,13 @@ object DocumentPngExporter {
         val pts = stroke.points
         if (brush.tool == ToolType.FILL) {
             paint.style = Paint.Style.FILL
+            val fillPath = Path()
             var i = 0
             while (i + 1 < pts.size) {
-                canvas.drawRect(pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y, paint)
+                fillPath.addRect(pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y, Path.Direction.CW)
                 i += 2
             }
+            canvas.drawPath(fillPath, paint)
             paint.style = Paint.Style.STROKE
             return
         }
