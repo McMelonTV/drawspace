@@ -1,104 +1,159 @@
 package space.owork.draw.ui.theme
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import space.owork.draw.engine.AppTheme
 
+/**
+ * Monochrome, content-first liquid-glass palette inspired by tvOS/iPadOS:
+ * the artwork & ink palette supply the color; chrome stays neutral and active controls invert crisply.
+ */
 @Immutable
-data class DrawspaceHudColors(
-    val pillBackground: Color,
-    val pillBorder: Color,
+data class GlassPalette(
+    val isDark: Boolean,
+    val background: Color,
+    val elevated: Color,
+    val elevated2: Color,
+    val text: Color,
+    val secondary: Color,
+    val tertiary: Color,
+    val separator: Color,
+    /** Solid high-contrast active/selected fill (white in dark/black, near-black in light). */
+    val active: Color,
+    val onActive: Color,
+    /** Translucent resting glass fills. */
+    val glass: Color,
+    val glassStrong: Color,
+    val material: Color,
+    val pillMaterial: Color,
+    val recessed: Color,
+    val specularTop: Color,
+    val specularBottom: Color,
     val swatchBorder: Color,
-    val modalBackground: Color,
-    val modalBorder: Color,
-    val modalDivider: Color,
-    val modalTrack: Color,
-    val modalActiveTab: Color,
-    val modalCard: Color,
-    val modalCardBorder: Color,
-    val modalInputBackground: Color,
+    val destructive: Color,
 )
 
-val LocalHudColors = staticCompositionLocalOf {
-    DrawspaceHudColors(
-        pillBackground = Color(0xEC141519),
-        pillBorder = Color(0x1AFFFFFF),
-        swatchBorder = Color(0x55FFFFFF),
-        modalBackground = Color(0xFF15161A),
-        modalBorder = Color(0x1CFFFFFF),
-        modalDivider = Color(0x12FFFFFF),
-        modalTrack = Color(0xFF0D0E11),
-        modalActiveTab = Color(0xFF25272F),
-        modalCard = Color(0x0CFFFFFF),
-        modalCardBorder = Color(0x12FFFFFF),
-        modalInputBackground = Color(0xFF0E0F13),
-    )
-}
+val LocalGlass = staticCompositionLocalOf { DarkGlassPalette }
 
-private val StudioLightColorScheme = lightColorScheme(
-    primary = Color(0xFF285EC4),
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFE3ECFC),
-    onPrimaryContainer = Color(0xFF0E2554),
-    secondary = Color(0xFF555963),
-    onSecondary = Color.White,
-    secondaryContainer = Color(0xFFEAECEF),
-    onSecondaryContainer = Color(0xFF181A1F),
-    background = Color(0xFFF4F5F7),
-    onBackground = Color(0xFF141519),
-    surface = Color(0xFFFFFFFF),
-    onSurface = Color(0xFF141519),
-    surfaceVariant = Color(0xFFF0F1F4),
-    onSurfaceVariant = Color(0xFF5F6470),
-    surfaceTint = Color.Transparent,
-    outline = Color(0x1F000000),
-    error = Color(0xFFC93434),
+private val DarkGlassPalette = GlassPalette(
+    isDark = true,
+    background = Color(0xFF09090B),
+    elevated = Color(0xFF18181B),
+    elevated2 = Color(0xFF27272B),
+    text = Color(0xFFF5F5F7),
+    secondary = Color(0xFFF5F5F7).copy(alpha = 0.62f),
+    tertiary = Color(0xFFF5F5F7).copy(alpha = 0.36f),
+    separator = Color.White.copy(alpha = 0.10f),
+    active = Color(0xFFF7F7F9),
+    onActive = Color(0xFF0E0E10),
+    glass = Color.White.copy(alpha = 0.08f),
+    glassStrong = Color.White.copy(alpha = 0.16f),
+    material = Color(0xFF1A1A1E).copy(alpha = 0.94f),
+    pillMaterial = Color(0xFF16161A).copy(alpha = 0.88f),
+    recessed = Color.Black.copy(alpha = 0.38f),
+    specularTop = Color.White.copy(alpha = 0.24f),
+    specularBottom = Color.White.copy(alpha = 0.04f),
+    swatchBorder = Color.White.copy(alpha = 0.28f),
+    destructive = Color(0xFFFF453A),
 )
 
-private val StudioDarkColorScheme = darkColorScheme(
-    primary = Color(0xFF82AEFA),
-    onPrimary = Color(0xFF09162B),
-    primaryContainer = Color(0xFF1D2F4F),
-    onPrimaryContainer = Color(0xFFDCE8FF),
-    secondary = Color(0xFFA8ADB8),
-    onSecondary = Color(0xFF16171B),
-    secondaryContainer = Color(0xFF23252C),
-    onSecondaryContainer = Color(0xFFECEEF2),
-    background = Color(0xFF0F1013),
-    onBackground = Color(0xFFF0F1F4),
-    surface = Color(0xFF15161A),
-    onSurface = Color(0xFFF0F1F4),
-    surfaceVariant = Color(0xFF1E2026),
-    onSurfaceVariant = Color(0xFF8E93A0),
-    surfaceTint = Color.Transparent,
-    outline = Color(0x1AFFFFFF),
-    error = Color(0xFFF28B82),
-)
-
-private val StudioBlackColorScheme = darkColorScheme(
-    primary = Color(0xFF82AEFA),
-    onPrimary = Color(0xFF06101F),
-    primaryContainer = Color(0xFF14223B),
-    onPrimaryContainer = Color(0xFFDCE8FF),
-    secondary = Color(0xFFA8ADB8),
-    onSecondary = Color(0xFF0A0B0D),
-    secondaryContainer = Color(0xFF18191E),
-    onSecondaryContainer = Color(0xFFECEEF2),
+private val BlackGlassPalette = GlassPalette(
+    isDark = true,
     background = Color(0xFF000000),
-    onBackground = Color(0xFFF4F5F7),
-    surface = Color(0xFF0A0B0D),
-    onSurface = Color(0xFFF4F5F7),
-    surfaceVariant = Color(0xFF141519),
-    onSurfaceVariant = Color(0xFF8A8F9C),
-    surfaceTint = Color.Transparent,
-    outline = Color(0x1EFFFFFF),
-    error = Color(0xFFF28B82),
+    elevated = Color(0xFF0D0D0F),
+    elevated2 = Color(0xFF1B1B1F),
+    text = Color(0xFFF7F7F9),
+    secondary = Color(0xFFF7F7F9).copy(alpha = 0.60f),
+    tertiary = Color(0xFFF7F7F9).copy(alpha = 0.34f),
+    separator = Color.White.copy(alpha = 0.11f),
+    active = Color(0xFFFFFFFF),
+    onActive = Color(0xFF000000),
+    glass = Color.White.copy(alpha = 0.08f),
+    glassStrong = Color.White.copy(alpha = 0.17f),
+    material = Color(0xFF0C0C0E).copy(alpha = 0.96f),
+    pillMaterial = Color(0xFF050507).copy(alpha = 0.92f),
+    recessed = Color(0xFF000000),
+    specularTop = Color.White.copy(alpha = 0.24f),
+    specularBottom = Color.White.copy(alpha = 0.05f),
+    swatchBorder = Color.White.copy(alpha = 0.34f),
+    destructive = Color(0xFFFF453A),
+)
+
+private val LightGlassPalette = GlassPalette(
+    isDark = false,
+    background = Color(0xFFF4F4F6),
+    elevated = Color(0xFFFFFFFF),
+    elevated2 = Color(0xFFE7E7EC),
+    text = Color(0xFF111114),
+    secondary = Color(0xFF111114).copy(alpha = 0.58f),
+    tertiary = Color(0xFF111114).copy(alpha = 0.36f),
+    separator = Color.Black.copy(alpha = 0.09f),
+    active = Color(0xFF141417),
+    onActive = Color(0xFFFFFFFF),
+    glass = Color.Black.copy(alpha = 0.055f),
+    glassStrong = Color.Black.copy(alpha = 0.11f),
+    material = Color(0xFFFAFAFC).copy(alpha = 0.95f),
+    pillMaterial = Color(0xFFFFFFFF).copy(alpha = 0.90f),
+    recessed = Color.Black.copy(alpha = 0.06f),
+    specularTop = Color.Black.copy(alpha = 0.08f),
+    specularBottom = Color.Black.copy(alpha = 0.16f),
+    swatchBorder = Color.Black.copy(alpha = 0.22f),
+    destructive = Color(0xFFD93025),
+)
+
+/**
+ * Liquid-glass surface: translucent fill + top-bright specular rim light.
+ */
+fun Modifier.glass(
+    shape: Shape,
+    palette: GlassPalette,
+    fill: Color = palette.glass,
+    edge: Boolean = true,
+): Modifier = clip(shape)
+    .background(fill)
+    .then(
+        if (edge) {
+            Modifier.border(
+                width = 1.dp,
+                brush = Brush.verticalGradient(listOf(palette.specularTop, palette.specularBottom)),
+                shape = shape,
+            )
+        } else {
+            Modifier
+        },
+    )
+
+private val StudioTypography = Typography(
+    displayLarge = TextStyle(fontWeight = FontWeight.Bold, fontSize = 36.sp, lineHeight = 42.sp, letterSpacing = (-1.0).sp),
+    headlineLarge = TextStyle(fontWeight = FontWeight.Bold, fontSize = 28.sp, lineHeight = 34.sp, letterSpacing = (-0.7).sp),
+    headlineMedium = TextStyle(fontWeight = FontWeight.Bold, fontSize = 22.sp, lineHeight = 28.sp, letterSpacing = (-0.45).sp),
+    headlineSmall = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 20.sp, lineHeight = 26.sp, letterSpacing = (-0.35).sp),
+    titleLarge = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 18.sp, lineHeight = 23.sp, letterSpacing = (-0.25).sp),
+    titleMedium = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 15.sp, lineHeight = 20.sp, letterSpacing = (-0.15).sp),
+    titleSmall = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 14.sp, lineHeight = 18.sp, letterSpacing = (-0.1).sp),
+    bodyLarge = TextStyle(fontWeight = FontWeight.Normal, fontSize = 15.sp, lineHeight = 22.sp),
+    bodyMedium = TextStyle(fontWeight = FontWeight.Normal, fontSize = 13.5.sp, lineHeight = 19.sp),
+    bodySmall = TextStyle(fontWeight = FontWeight.Normal, fontSize = 12.sp, lineHeight = 16.sp),
+    labelLarge = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 13.5.sp, letterSpacing = (-0.1).sp),
+    labelMedium = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 12.sp),
+    labelSmall = TextStyle(fontWeight = FontWeight.Medium, fontSize = 11.sp),
 )
 
 @Composable
@@ -106,58 +161,53 @@ fun DrawspaceTheme(
     appTheme: AppTheme = AppTheme.DARK,
     content: @Composable () -> Unit,
 ) {
-    val colorScheme = when (appTheme) {
-        AppTheme.LIGHT -> StudioLightColorScheme
-        AppTheme.DARK -> StudioDarkColorScheme
-        AppTheme.BLACK -> StudioBlackColorScheme
+    val glass = when (appTheme) {
+        AppTheme.LIGHT -> LightGlassPalette
+        AppTheme.DARK -> DarkGlassPalette
+        AppTheme.BLACK -> BlackGlassPalette
     }
-    val hudColors = when (appTheme) {
-        AppTheme.LIGHT -> DrawspaceHudColors(
-            pillBackground = Color(0xF2FFFFFF),
-            pillBorder = Color(0x1A000000),
-            swatchBorder = Color(0x40000000),
-            modalBackground = Color(0xFFFFFFFF),
-            modalBorder = Color(0x1A000000),
-            modalDivider = Color(0x12000000),
-            modalTrack = Color(0xFFF0F1F4),
-            modalActiveTab = Color(0xFFFFFFFF),
-            modalCard = Color(0xFFF6F7F9),
-            modalCardBorder = Color(0x12000000),
-            modalInputBackground = Color(0xFFF5F6F8),
+    val colorScheme = if (glass.isDark) {
+        darkColorScheme(
+            primary = glass.active,
+            onPrimary = glass.onActive,
+            primaryContainer = glass.glassStrong,
+            onPrimaryContainer = glass.text,
+            secondary = glass.secondary,
+            onSecondary = glass.onActive,
+            background = glass.background,
+            onBackground = glass.text,
+            surface = glass.elevated,
+            onSurface = glass.text,
+            surfaceVariant = glass.elevated2,
+            onSurfaceVariant = glass.secondary,
+            surfaceTint = Color.Transparent,
+            outline = glass.separator,
+            error = glass.destructive,
         )
-
-        AppTheme.DARK -> DrawspaceHudColors(
-            pillBackground = Color(0xEC141519),
-            pillBorder = Color(0x1AFFFFFF),
-            swatchBorder = Color(0x55FFFFFF),
-            modalBackground = Color(0xFF15161A),
-            modalBorder = Color(0x1CFFFFFF),
-            modalDivider = Color(0x12FFFFFF),
-            modalTrack = Color(0xFF0D0E11),
-            modalActiveTab = Color(0xFF25272F),
-            modalCard = Color(0x0BFFFFFF),
-            modalCardBorder = Color(0x12FFFFFF),
-            modalInputBackground = Color(0xFF0E0F13),
-        )
-
-        AppTheme.BLACK -> DrawspaceHudColors(
-            pillBackground = Color(0xF5000000),
-            pillBorder = Color(0x1EFFFFFF),
-            swatchBorder = Color(0x66FFFFFF),
-            modalBackground = Color(0xFF0A0B0D),
-            modalBorder = Color(0x1EFFFFFF),
-            modalDivider = Color(0x14FFFFFF),
-            modalTrack = Color(0xFF000000),
-            modalActiveTab = Color(0xFF1C1D23),
-            modalCard = Color(0x0CFFFFFF),
-            modalCardBorder = Color(0x14FFFFFF),
-            modalInputBackground = Color(0xFF000000),
+    } else {
+        lightColorScheme(
+            primary = glass.active,
+            onPrimary = glass.onActive,
+            primaryContainer = glass.glassStrong,
+            onPrimaryContainer = glass.text,
+            secondary = glass.secondary,
+            onSecondary = glass.onActive,
+            background = glass.background,
+            onBackground = glass.text,
+            surface = glass.elevated,
+            onSurface = glass.text,
+            surfaceVariant = glass.elevated2,
+            onSurfaceVariant = glass.secondary,
+            surfaceTint = Color.Transparent,
+            outline = glass.separator,
+            error = glass.destructive,
         )
     }
 
-    CompositionLocalProvider(LocalHudColors provides hudColors) {
+    CompositionLocalProvider(LocalGlass provides glass) {
         MaterialTheme(
             colorScheme = colorScheme,
+            typography = StudioTypography,
             content = content,
         )
     }

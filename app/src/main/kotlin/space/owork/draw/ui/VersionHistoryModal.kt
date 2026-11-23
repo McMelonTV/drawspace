@@ -1,6 +1,5 @@
 package space.owork.draw.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,9 +17,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BookmarkAdd
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -30,10 +27,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import space.owork.draw.AppUiState
 import space.owork.draw.storage.CheckpointInfo
-import space.owork.draw.ui.theme.LocalHudColors
+import space.owork.draw.ui.theme.LocalGlass
+import space.owork.draw.ui.theme.glass
 import java.text.DateFormat
 import java.util.Date
 
@@ -45,14 +46,14 @@ fun VersionHistoryModal(
     onRestoreCheckpoint: (CheckpointInfo) -> Unit,
     onRequestCheckpointPreview: (String) -> Unit,
 ) {
-    val hudColors = LocalHudColors.current
+    val p = LocalGlass.current
     var snapshotLabel by remember { mutableStateOf("") }
 
-    StudioModal(
+    GlassModal(
         title = "Version History",
         subtitle = "${state.history.size} saved checkpoints · added strokes highlighted",
         onDismiss = onDismiss,
-        maxWidth = 580.dp,
+        maxWidth = 560.dp,
         maxHeight = 620.dp,
     ) {
         Row(
@@ -60,16 +61,16 @@ fun VersionHistoryModal(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            StudioTextField(
+            GlassTextField(
                 value = snapshotLabel,
                 onValueChange = { snapshotLabel = it },
                 placeholder = "Name a new snapshot…",
                 modifier = Modifier.weight(1f),
             )
-            StudioInlineButton(
-                icon = Icons.Outlined.BookmarkAdd,
+            GlassButton(
                 label = "Save",
-                enabled = true,
+                icon = Icons.Outlined.BookmarkAdd,
+                primary = snapshotLabel.isNotBlank(),
                 onClick = {
                     val label = snapshotLabel.trim().ifEmpty { "Snapshot" }
                     snapshotLabel = ""
@@ -113,13 +114,11 @@ fun VersionHistoryModal(
                     DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.MEDIUM)
                         .format(Date(cp.timestampMs))
                 }
-                val cardShape = RoundedCornerShape(12.dp)
+                val cardShape = RoundedCornerShape(14.dp)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(cardShape)
-                        .background(hudColors.modalCard)
-                        .border(1.dp, hudColors.modalCardBorder, cardShape)
+                        .glass(cardShape, p, fill = p.glass, edge = true)
                         .padding(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -128,7 +127,7 @@ fun VersionHistoryModal(
                         modifier = Modifier
                             .size(width = 92.dp, height = 58.dp)
                             .clip(RoundedCornerShape(8.dp))
-                            .border(1.dp, hudColors.modalCardBorder, RoundedCornerShape(8.dp)),
+                            .border(1.dp, p.separator, RoundedCornerShape(8.dp)),
                         contentAlignment = Alignment.Center,
                     ) {
                         if (preview != null) {
@@ -136,24 +135,22 @@ fun VersionHistoryModal(
                                 summary = preview,
                                 appTheme = state.appTheme,
                                 highlightStrokeIds = addedIds,
-                                highlightColor = MaterialTheme.colorScheme.primary,
+                                highlightColor = Color(0xFF5AC8FA),
                                 fixedArtboardPaddingDp = 4f,
                                 showPattern = false,
                                 modifier = Modifier.fillMaxSize(),
                             )
                         } else {
-                            Text(
-                                "…",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            Text("…", color = p.secondary, fontSize = 11.sp)
                         }
                     }
 
                     Column(Modifier.weight(1f)) {
                         Text(
                             text = if (cp.isNamedSnapshot) "★ ${cp.label}" else cp.label,
-                            style = MaterialTheme.typography.bodyMedium,
+                            color = p.text,
+                            fontSize = 13.5.sp,
+                            fontWeight = FontWeight.Medium,
                         )
                         val stats = buildString {
                             append(ts)
@@ -165,18 +162,20 @@ fun VersionHistoryModal(
                         }
                         Text(
                             text = stats,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = p.secondary,
+                            fontSize = 11.5.sp,
+                            modifier = Modifier.padding(top = 2.dp),
                         )
                     }
-                    TextButton(
+
+                    GlassButton(
+                        label = "Restore",
+                        height = 34.dp,
                         onClick = {
                             onDismiss()
                             onRestoreCheckpoint(cp)
                         },
-                    ) {
-                        Text("Restore")
-                    }
+                    )
                 }
             }
         }

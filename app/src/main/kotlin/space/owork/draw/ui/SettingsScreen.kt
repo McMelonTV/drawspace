@@ -1,6 +1,6 @@
 package space.owork.draw.ui
 
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,38 +8,45 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import space.owork.draw.engine.AntiAliasingMode
 import space.owork.draw.engine.AppSettings
 import space.owork.draw.engine.AppTheme
 import space.owork.draw.engine.BackgroundPattern
 import space.owork.draw.engine.CanvasLockMode
 import space.owork.draw.engine.StrokeSmoothingLevel
+import space.owork.draw.ui.theme.LocalGlass
+import space.owork.draw.ui.theme.glass
 import kotlin.math.roundToInt
 
+/**
+ * tvOS/iPadOS-inspired two-column glass Settings screen.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
@@ -47,111 +54,166 @@ fun SettingsScreen(
     onBack: () -> Unit,
     onUpdateSettings: ((AppSettings) -> AppSettings) -> Unit,
 ) {
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background,
+    val p = LocalGlass.current
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(p.background)
+            .safeDrawingPadding(),
     ) {
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
-                .safeDrawingPadding(),
-            contentAlignment = Alignment.TopCenter,
+                .padding(horizontal = 28.dp, vertical = 20.dp),
+            horizontalArrangement = Arrangement.spacedBy(32.dp),
         ) {
+            // Left hero column (tvOS Settings pattern)
             Column(
                 modifier = Modifier
-                    .widthIn(max = 760.dp)
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                    .weight(0.34f)
+                    .fillMaxHeight(),
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
-                    }
-                    Column {
-                        Text("Settings", style = MaterialTheme.typography.headlineSmall)
+                    GlassIconButton(
+                        icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                        contentDescription = "Back",
+                        size = 40.dp,
+                        onClick = onBack,
+                    )
+                    Text(
+                        text = "Settings",
+                        color = p.text,
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = (-0.7).sp,
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        val iconShape = RoundedCornerShape(34.dp)
+                        Box(
+                            modifier = Modifier
+                                .size(116.dp)
+                                .shadow(28.dp, iconShape, clip = false)
+                                .glass(iconShape, p, fill = Color.Transparent)
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(
+                                            p.glassStrong,
+                                            p.glass.copy(alpha = p.glass.alpha * 0.4f),
+                                        ),
+                                    ),
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                Icons.Outlined.Tune,
+                                contentDescription = null,
+                                tint = p.text,
+                                modifier = Modifier.size(52.dp),
+                            )
+                        }
                         Text(
-                            "Global app preferences & rendering defaults",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            text = "Drawspace Studio",
+                            color = p.text,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = (-0.25).sp,
+                            textAlign = TextAlign.Center,
+                        )
+                        Text(
+                            text = "Monochrome glass chrome, GLES 3.0 ink rendering, stylus defaults, and new-canvas presets.",
+                            color = p.secondary,
+                            fontSize = 13.sp,
+                            lineHeight = 19.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.widthIn(max = 260.dp),
                         )
                     }
                 }
+            }
 
-                // 1. App Appearance
-                SettingsSection(title = "Appearance") {
+            // Right settings groups column
+            Column(
+                modifier = Modifier
+                    .weight(0.66f)
+                    .fillMaxHeight()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                GlassSettingsCard(title = "Appearance") {
+                    Text("App Theme", color = p.text, fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold)
                     Text(
-                        "App Theme",
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    Text(
-                        "Controls app chrome and acts as the default canvas theme for sketches set to Follow App.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        "Styles app chrome and serves as the default background theme for sketches set to Follow App.",
+                        color = p.secondary,
+                        fontSize = 12.5.sp,
+                        lineHeight = 18.sp,
                     )
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         AppTheme.entries.forEach { t ->
-                            FilterChip(
+                            GlassChip(
+                                label = if (t == AppTheme.BLACK) "Black (AMOLED)" else t.label,
                                 selected = settings.appTheme == t,
                                 onClick = { onUpdateSettings { it.copy(appTheme = t) } },
-                                label = {
-                                    Text(if (t == AppTheme.BLACK) "Black (AMOLED)" else t.label)
-                                },
                             )
                         }
                     }
                 }
 
-                // 2. Rendering & Line Quality
-                SettingsSection(title = "Rendering & Line Quality") {
-                    Text("Line Anti-Aliasing", style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        settings.antiAliasing.description,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                GlassSettingsCard(title = "Rendering & Line Quality") {
+                    Text("Line Anti-Aliasing", color = p.text, fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold)
+                    Text(settings.antiAliasing.description, color = p.secondary, fontSize = 12.5.sp)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         AntiAliasingMode.entries.forEach { mode ->
-                            FilterChip(
+                            GlassChip(
+                                label = mode.label,
                                 selected = settings.antiAliasing == mode,
                                 onClick = { onUpdateSettings { it.copy(antiAliasing = mode) } },
-                                label = { Text(mode.label) },
                             )
                         }
                     }
 
-                    HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                    GlassDivider(Modifier.padding(vertical = 4.dp))
 
-                    Text("Stroke Smoothing", style = MaterialTheme.typography.titleSmall)
+                    Text("Stroke Smoothing", color = p.text, fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold)
                     Text(
-                        "Reduces micro-jitter on thin stylus strokes while preserving responsiveness.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        "Damps stylus micro-jitter on thin lines while staying responsive.",
+                        color = p.secondary,
+                        fontSize = 12.5.sp,
                     )
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         StrokeSmoothingLevel.entries.forEach { lvl ->
-                            FilterChip(
+                            GlassChip(
+                                label = lvl.label,
                                 selected = settings.strokeSmoothing == lvl,
                                 onClick = { onUpdateSettings { it.copy(strokeSmoothing = lvl) } },
-                                label = { Text(lvl.label) },
                             )
                         }
                     }
 
-                    HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                    GlassDivider(Modifier.padding(vertical = 4.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -159,62 +221,52 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
-                            Text("Round Turns & Line Ends", style = MaterialTheme.typography.titleSmall)
+                            Text("Round Turns & Line Ends", color = p.text, fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold)
                             Text(
-                                "Trims stylus lift hooks and applies corner-rounding on pen-up so zoomed-in strokes stay smooth.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                "Trims stylus lift hooks and rounds sharp corners on pen-up.",
+                                color = p.secondary,
+                                fontSize = 12.5.sp,
                             )
                         }
-                        Switch(
+                        GlassToggle(
                             checked = settings.roundTurnsAndEnds,
-                            onCheckedChange = { enabled ->
-                                onUpdateSettings { it.copy(roundTurnsAndEnds = enabled) }
-                            },
+                            onCheckedChange = { enabled -> onUpdateSettings { it.copy(roundTurnsAndEnds = enabled) } },
                         )
                     }
                 }
 
-                // 3. Stylus & Navigation
-                SettingsSection(title = "Stylus & Navigation") {
+                GlassSettingsCard(title = "Stylus & Navigation") {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
-                            Text("Stylus-Only Mode by Default", style = MaterialTheme.typography.titleSmall)
+                            Text("Stylus-Only Mode by Default", color = p.text, fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold)
                             Text(
-                                "Disables finger drawing by default so only the stylus draws. Two-finger pan/zoom/rotate still works.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                "Disables single-finger drawing by default; 2-finger pan/zoom/rotate stays active.",
+                                color = p.secondary,
+                                fontSize = 12.5.sp,
                             )
                         }
-                        Switch(
+                        GlassToggle(
                             checked = settings.stylusOnlyDefault,
-                            onCheckedChange = { enabled ->
-                                onUpdateSettings { it.copy(stylusOnlyDefault = enabled) }
-                            },
+                            onCheckedChange = { enabled -> onUpdateSettings { it.copy(stylusOnlyDefault = enabled) } },
                         )
                     }
 
-                    HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                    GlassDivider(Modifier.padding(vertical = 4.dp))
 
-                    Text("Default Canvas Lock Mode", style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        "Quick-toggled on the canvas toolbar.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Text("Default Canvas Lock Mode", color = p.text, fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         CanvasLockMode.entries.forEach { mode ->
-                            FilterChip(
+                            GlassChip(
+                                label = mode.label,
                                 selected = settings.defaultLockMode == mode,
                                 onClick = { onUpdateSettings { it.copy(defaultLockMode = mode) } },
-                                label = { Text(mode.label) },
                             )
                         }
                     }
@@ -225,81 +277,73 @@ fun SettingsScreen(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
-                            Text("Lock Panning", style = MaterialTheme.typography.titleSmall)
+                            Text("Lock Panning", color = p.text, fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold)
                             Text(
                                 "Prevents 2-finger panning across the canvas.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = p.secondary,
+                                fontSize = 12.5.sp,
                             )
                         }
-                        Switch(
+                        GlassToggle(
                             checked = settings.lockPan,
-                            onCheckedChange = { locked ->
-                                onUpdateSettings { it.copy(lockPan = locked) }
-                            },
+                            onCheckedChange = { locked -> onUpdateSettings { it.copy(lockPan = locked) } },
                         )
                     }
                 }
 
-                // 4. New Canvas Defaults
-                SettingsSection(title = "New Canvas Defaults") {
-                    Text("Default Background Pattern", style = MaterialTheme.typography.titleSmall)
+                GlassSettingsCard(title = "New Canvas Defaults") {
+                    Text("Default Background Pattern", color = p.text, fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         BackgroundPattern.entries.forEach { pat ->
-                            FilterChip(
+                            GlassChip(
+                                label = pat.label,
                                 selected = settings.defaultPattern == pat,
                                 onClick = { onUpdateSettings { it.copy(defaultPattern = pat) } },
-                                label = { Text(pat.label) },
                             )
                         }
                     }
 
                     if (settings.defaultPattern != BackgroundPattern.BLANK) {
-                        Column {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(
-                                "Default Pattern Spacing: ${settings.defaultPatternSpacingPx.roundToInt()} px",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                "Default Pattern Spacing · ${settings.defaultPatternSpacingPx.roundToInt()} px",
+                                color = p.secondary,
+                                fontSize = 12.sp,
                             )
-                            Slider(
+                            GlassSlider(
                                 value = settings.defaultPatternSpacingPx,
                                 onValueChange = { v -> onUpdateSettings { it.copy(defaultPatternSpacingPx = v) } },
                                 valueRange = 20f..160f,
+                                modifier = Modifier.fillMaxWidth(),
                             )
                         }
                     }
                 }
 
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(20.dp))
             }
         }
     }
 }
 
 @Composable
-private fun SettingsSection(
+private fun GlassSettingsCard(
     title: String,
     content: @Composable () -> Unit,
 ) {
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        modifier = Modifier.fillMaxWidth(),
+    val p = LocalGlass.current
+    val shape = RoundedCornerShape(20.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .glass(shape, p, fill = p.elevated, edge = true)
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            content()
-        }
+        GlassSectionLabel(title)
+        content()
     }
 }

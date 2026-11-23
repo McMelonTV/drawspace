@@ -1,15 +1,16 @@
 package space.owork.draw.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -17,7 +18,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Redo
@@ -37,13 +37,7 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.ScreenRotationAlt
 import androidx.compose.material.icons.outlined.TouchApp
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -54,11 +48,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.painter.Painter
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import space.owork.draw.AppUiState
 import space.owork.draw.R
@@ -73,7 +66,7 @@ import space.owork.draw.engine.ViewportCamera
 import space.owork.draw.engine.WorldRect
 import space.owork.draw.renderer.DrawspaceSurfaceView
 import space.owork.draw.storage.CheckpointInfo
-import space.owork.draw.ui.theme.LocalHudColors
+import space.owork.draw.ui.theme.LocalGlass
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -108,7 +101,7 @@ fun CanvasScreen(
     onExportPng: () -> Unit,
 ) {
     val doc = state.activeDocument ?: return
-    val hudColors = LocalHudColors.current
+    val p = LocalGlass.current
     var surfaceRef by remember { mutableStateOf<DrawspaceSurfaceView?>(null) }
     var showDocumentModal by remember { mutableStateOf(false) }
     var showHistoryModal by remember { mutableStateOf(false) }
@@ -163,7 +156,7 @@ fun CanvasScreen(
             },
         )
 
-        // Top floating header bar
+        // Top floating glass capsules
         Row(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -173,216 +166,247 @@ fun CanvasScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            // Left pill: Back + Document & Canvas Studio Menu trigger
-            FloatingPill {
+            // Top-left: Back + Document/Canvas modal trigger
+            GlassPill(shape = CircleShape) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 5.dp),
                 ) {
-                    IconButton(onClick = onBack, modifier = Modifier.size(36.dp)) {
-                        Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back to workspace")
-                    }
+                    GlassIconButton(
+                        icon = Icons.AutoMirrored.Outlined.ArrowBack,
+                        contentDescription = "Back to workspace",
+                        size = 36.dp,
+                        subtle = true,
+                        onClick = onBack,
+                    )
                     Row(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable { showDocumentModal = true }
-                            .padding(start = 6.dp, end = 8.dp, top = 3.dp, bottom = 3.dp),
+                            .clip(CircleShape)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = { showDocumentModal = true },
+                            )
+                            .padding(start = 6.dp, end = 10.dp, top = 2.dp, bottom = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         Column {
-                            Text(doc.title, style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                text = doc.title,
+                                color = p.text,
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = (-0.15).sp,
+                            )
                             val modeText = when (val m = doc.canvasMode) {
                                 CanvasMode.Infinite -> "Infinite"
                                 is CanvasMode.Fixed -> "${m.widthPx}×${m.heightPx}"
                             }
                             Text(
-                                "$modeText · ${(state.cameraZoom * 100).roundToInt()}% · ${state.saveStatus}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                text = "$modeText · ${(state.cameraZoom * 100).roundToInt()}% · ${state.saveStatus}",
+                                color = p.secondary,
+                                fontSize = 11.sp,
                             )
                         }
                         Icon(
                             Icons.Outlined.ExpandMore,
                             contentDescription = "Document and canvas options",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = p.secondary,
                             modifier = Modifier.size(18.dp),
                         )
                     }
                 }
             }
 
-            // Right pill: Quick mid-sketch viewport & input toggles
-            FloatingPill {
+            // Top-right: High-frequency viewport & input glass capsule
+            GlassPill(shape = CircleShape) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 5.dp),
                 ) {
-                    IconButton(
+                    GlassIconButton(
+                        icon = if (state.allowFingerDrawing) Icons.Outlined.TouchApp else Icons.Outlined.Draw,
+                        contentDescription = if (state.allowFingerDrawing) "Finger & Stylus draw" else "Stylus-only draw",
+                        active = !state.allowFingerDrawing,
+                        subtle = state.allowFingerDrawing,
+                        size = 36.dp,
                         onClick = onToggleFingerDrawing,
-                        modifier = Modifier.size(38.dp),
+                    )
+
+                    val isLocked = state.lockMode != CanvasLockMode.UNLOCKED
+                    Row(
+                        modifier = Modifier
+                            .height(36.dp)
+                            .clip(CircleShape)
+                            .background(if (isLocked) p.active else Color.Transparent)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = onCycleLockMode,
+                            )
+                            .padding(horizontal = if (isLocked) 11.dp else 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
                         Icon(
-                            imageVector = if (state.allowFingerDrawing) Icons.Outlined.TouchApp else Icons.Outlined.Draw,
-                            contentDescription = if (state.allowFingerDrawing) "Finger & Stylus draw" else "Stylus-only draw",
-                            tint = if (state.allowFingerDrawing) {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            } else {
-                                MaterialTheme.colorScheme.primary
-                            },
+                            imageVector = if (isLocked) Icons.Outlined.Lock else Icons.Outlined.LockOpen,
+                            contentDescription = state.lockMode.label,
+                            tint = if (isLocked) p.onActive else p.secondary,
+                            modifier = Modifier.size(18.dp),
                         )
-                    }
-
-                    // 1-tap cycling lock toggle: Unlocked -> Lock Rotation -> Lock Zoom -> Lock Zoom & Rotation
-                    val isLocked = state.lockMode != CanvasLockMode.UNLOCKED
-                    Surface(
-                        onClick = onCycleLockMode,
-                        shape = RoundedCornerShape(10.dp),
-                        color = if (isLocked) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 7.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Icon(
-                                imageVector = if (isLocked) Icons.Outlined.Lock else Icons.Outlined.LockOpen,
-                                contentDescription = state.lockMode.label,
-                                tint = if (isLocked) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                                modifier = Modifier.size(20.dp),
+                        state.lockMode.shortBadge?.let { badge ->
+                            Text(
+                                text = badge,
+                                color = p.onActive,
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold,
                             )
-                            state.lockMode.shortBadge?.let { badge ->
-                                Text(
-                                    text = badge,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                            }
                         }
                     }
 
                     if (abs(state.cameraRotationRad) > 0.02f) {
-                        IconButton(
+                        GlassIconButton(
+                            icon = Icons.Outlined.ScreenRotationAlt,
+                            contentDescription = "Reset rotation to 0°",
+                            active = true,
+                            size = 36.dp,
                             onClick = { surfaceRef?.resetRotation() },
-                            modifier = Modifier.size(38.dp),
-                        ) {
-                            Icon(
-                                Icons.Outlined.ScreenRotationAlt,
-                                contentDescription = "Reset rotation to 0°",
-                                tint = MaterialTheme.colorScheme.primary,
-                            )
-                        }
+                        )
                     }
 
                     if (doc.meta.background.pattern != BackgroundPattern.BLANK) {
-                        IconButton(
+                        GlassIconButton(
+                            icon = if (state.hidePatternTemporarily) Icons.Outlined.GridOff else Icons.Outlined.GridOn,
+                            contentDescription = if (state.hidePatternTemporarily) "Show background pattern" else "Hide background pattern temporarily",
+                            active = state.hidePatternTemporarily,
+                            subtle = !state.hidePatternTemporarily,
+                            size = 36.dp,
                             onClick = onToggleHidePattern,
-                            modifier = Modifier.size(38.dp),
-                        ) {
-                            Icon(
-                                imageVector = if (state.hidePatternTemporarily) Icons.Outlined.GridOff else Icons.Outlined.GridOn,
-                                contentDescription = if (state.hidePatternTemporarily) "Show background pattern" else "Hide background pattern temporarily",
-                                tint = if (state.hidePatternTemporarily) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                            )
-                        }
+                        )
                     }
 
-                    IconButton(
+                    GlassIconButton(
+                        icon = Icons.Outlined.CenterFocusStrong,
+                        contentDescription = "Fit canvas to screen",
+                        subtle = true,
+                        size = 36.dp,
                         onClick = { surfaceRef?.fitToView() },
-                        modifier = Modifier.size(38.dp),
-                    ) {
-                        Icon(Icons.Outlined.CenterFocusStrong, contentDescription = "Fit canvas to screen")
-                    }
-                    IconButton(
+                    )
+                    GlassIconButton(
+                        icon = Icons.Outlined.History,
+                        contentDescription = "Version history",
+                        subtle = true,
+                        size = 36.dp,
                         onClick = { showHistoryModal = true },
-                        modifier = Modifier.size(38.dp),
-                    ) {
-                        Icon(Icons.Outlined.History, contentDescription = "History checkpoints")
-                    }
+                    )
                 }
             }
         }
 
-        // Left floating tool rail (tablet ergonomic reach)
-        FloatingPill(
+        // Left floating glass tool capsule
+        GlassPill(
+            shape = CircleShape,
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .safeDrawingPadding()
                 .padding(start = 16.dp),
         ) {
             Column(
-                modifier = Modifier.padding(vertical = 8.dp, horizontal = 6.dp),
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                ToolRailButton(
+                GlassIconButton(
                     icon = Icons.Outlined.Edit,
-                    label = "Pen",
-                    selected = state.activeTool == ToolType.PEN,
+                    contentDescription = "Pen",
+                    active = state.activeTool == ToolType.PEN,
+                    subtle = state.activeTool != ToolType.PEN,
+                    size = 42.dp,
                     onClick = { onSelectTool(ToolType.PEN) },
                 )
-                ToolRailButton(
+                GlassIconButton(
                     icon = Icons.Outlined.BorderColor,
-                    label = "Pencil",
-                    selected = state.activeTool == ToolType.PENCIL,
+                    contentDescription = "Pencil",
+                    active = state.activeTool == ToolType.PENCIL,
+                    subtle = state.activeTool != ToolType.PENCIL,
+                    size = 42.dp,
                     onClick = { onSelectTool(ToolType.PENCIL) },
                 )
-                ToolRailButton(
+                GlassIconButton(
                     icon = Icons.Outlined.Brush,
-                    label = "Marker",
-                    selected = state.activeTool == ToolType.MARKER,
+                    contentDescription = "Marker",
+                    active = state.activeTool == ToolType.MARKER,
+                    subtle = state.activeTool != ToolType.MARKER,
+                    size = 42.dp,
                     onClick = { onSelectTool(ToolType.MARKER) },
                 )
-                ToolRailButton(
+                GlassIconButton(
                     painter = painterResource(R.drawable.ic_tool_line),
-                    label = "Line",
-                    selected = state.activeTool == ToolType.LINE,
+                    contentDescription = "Line",
+                    active = state.activeTool == ToolType.LINE,
+                    subtle = state.activeTool != ToolType.LINE,
+                    size = 42.dp,
                     onClick = { onSelectTool(ToolType.LINE) },
                 )
-                ToolRailButton(
+                GlassIconButton(
                     painter = painterResource(R.drawable.ic_tool_bucket),
-                    label = "Fill",
-                    selected = state.activeTool == ToolType.FILL,
+                    contentDescription = "Fill",
+                    active = state.activeTool == ToolType.FILL,
+                    subtle = state.activeTool != ToolType.FILL,
+                    size = 42.dp,
                     onClick = { onSelectTool(ToolType.FILL) },
                 )
-                ToolRailButton(
+                GlassIconButton(
                     painter = painterResource(R.drawable.ic_tool_eraser),
-                    label = "Eraser",
-                    selected = state.activeTool == ToolType.ERASER,
+                    contentDescription = "Eraser",
+                    active = state.activeTool == ToolType.ERASER,
+                    subtle = state.activeTool != ToolType.ERASER,
+                    size = 42.dp,
                     onClick = { onSelectTool(ToolType.ERASER) },
                 )
 
-                HorizontalDivider(modifier = Modifier.width(28.dp).padding(vertical = 4.dp))
+                Box(
+                    modifier = Modifier
+                        .padding(vertical = 2.dp)
+                        .width(24.dp)
+                        .height(1.dp)
+                        .background(p.separator),
+                )
 
-                IconButton(onClick = onUndo, enabled = state.canUndo, modifier = Modifier.size(40.dp)) {
-                    Icon(Icons.AutoMirrored.Outlined.Undo, contentDescription = "Undo")
-                }
-                IconButton(onClick = onRedo, enabled = state.canRedo, modifier = Modifier.size(40.dp)) {
-                    Icon(Icons.AutoMirrored.Outlined.Redo, contentDescription = "Redo")
-                }
+                GlassIconButton(
+                    icon = Icons.AutoMirrored.Outlined.Undo,
+                    contentDescription = "Undo",
+                    enabled = state.canUndo,
+                    subtle = true,
+                    size = 38.dp,
+                    onClick = onUndo,
+                )
+                GlassIconButton(
+                    icon = Icons.AutoMirrored.Outlined.Redo,
+                    contentDescription = "Redo",
+                    enabled = state.canRedo,
+                    subtle = true,
+                    size = 38.dp,
+                    onClick = onRedo,
+                )
             }
         }
 
-        // Bottom floating palette + brush size/opacity dock
-        FloatingPill(
+        // Bottom floating glass palette + monochrome sliders capsule
+        GlassPill(
+            shape = CircleShape,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .safeDrawingPadding()
                 .padding(bottom = 14.dp, start = 76.dp, end = 24.dp),
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 if (state.activeTool != ToolType.ERASER) {
                     Box(
@@ -390,11 +414,15 @@ fun CanvasScreen(
                             .size(32.dp)
                             .clip(CircleShape)
                             .background(Color(state.activeColorArgb))
-                            .border(2.5.dp, MaterialTheme.colorScheme.primary, CircleShape)
-                            .clickable { showColorPickerModal = true },
+                            .border(2.5.dp, p.active, CircleShape)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = { showColorPickerModal = true },
+                            ),
                         contentAlignment = Alignment.Center,
                     ) {
-                        val iconTint = if (CanvasBackground.isColorDark(state.activeColorArgb)) Color.White else Color(0xFF181A1F)
+                        val iconTint = if (CanvasBackground.isColorDark(state.activeColorArgb)) Color.White else Color(0xFF141417)
                         Icon(
                             Icons.Outlined.ColorLens,
                             contentDescription = "Open color picker",
@@ -417,10 +445,14 @@ fun CanvasScreen(
                                     .background(Color(swatch.argb))
                                     .border(
                                         width = if (selected) 2.5.dp else 1.dp,
-                                        color = if (selected) MaterialTheme.colorScheme.primary else hudColors.swatchBorder,
+                                        color = if (selected) p.active else p.swatchBorder,
                                         shape = CircleShape,
                                     )
-                                    .clickable { onSelectColor(swatch.argb) },
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = { onSelectColor(swatch.argb) },
+                                    ),
                             )
                         }
                         item {
@@ -428,15 +460,20 @@ fun CanvasScreen(
                                 modifier = Modifier
                                     .size(26.dp)
                                     .clip(CircleShape)
-                                    .border(1.dp, hudColors.swatchBorder, CircleShape)
-                                    .clickable { showColorPickerModal = true },
+                                    .background(p.glass)
+                                    .border(1.dp, p.swatchBorder, CircleShape)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = { showColorPickerModal = true },
+                                    ),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Icon(
                                     Icons.Outlined.Add,
                                     contentDescription = "Customize palette",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(16.dp),
+                                    tint = p.secondary,
+                                    modifier = Modifier.size(15.dp),
                                 )
                             }
                         }
@@ -444,42 +481,44 @@ fun CanvasScreen(
                 } else {
                     Text(
                         text = "Eraser",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = p.secondary,
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.SemiBold,
                     )
                 }
 
                 if (state.activeTool == ToolType.LINE) {
                     if (doc.meta.background.pattern != BackgroundPattern.BLANK) {
-                        FilterChip(
+                        GlassChip(
+                            label = "Grid Snap",
                             selected = state.snapLineToGrid,
                             onClick = onToggleSnapLineToGrid,
-                            label = { Text("Grid Snap") },
                         )
                     }
-                    FilterChip(
+                    GlassChip(
+                        label = "15° Snap",
                         selected = state.snapLineAngles && !state.snapLineToGrid,
                         onClick = onToggleSnapLineAngles,
-                        label = { Text("15° Snap") },
                     )
                 }
 
                 if (state.activeTool != ToolType.FILL) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Text(
                             text = "${state.activeBrush.sizeWorldPx.roundToInt()}px",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = p.secondary,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Medium,
                             modifier = Modifier.width(34.dp),
                         )
-                        Slider(
+                        GlassSlider(
                             value = state.activeBrush.sizeWorldPx,
                             onValueChange = onSizeChange,
                             valueRange = 1f..64f,
-                            modifier = Modifier.width(if (state.activeTool == ToolType.ERASER) 160.dp else 110.dp),
+                            modifier = Modifier.width(if (state.activeTool == ToolType.ERASER) 160.dp else 108.dp),
                         )
                     }
                 }
@@ -487,19 +526,20 @@ fun CanvasScreen(
                 if (state.activeTool != ToolType.ERASER) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Text(
                             text = "${(state.activeBrush.opacity * 100).roundToInt()}%",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = p.secondary,
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Medium,
                             modifier = Modifier.width(34.dp),
                         )
-                        Slider(
+                        GlassSlider(
                             value = state.activeBrush.opacity,
                             onValueChange = onOpacityChange,
                             valueRange = 0.08f..1f,
-                            modifier = Modifier.width(96.dp),
+                            modifier = Modifier.width(92.dp),
                         )
                     }
                 }
@@ -544,60 +584,5 @@ fun CanvasScreen(
             onRestoreCheckpoint = onRestoreCheckpoint,
             onRequestCheckpointPreview = onRequestCheckpointPreview,
         )
-    }
-}
-
-@Composable
-private fun FloatingPill(
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
-) {
-    val hudColors = LocalHudColors.current
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(18.dp),
-        color = hudColors.pillBackground,
-        border = BorderStroke(1.dp, hudColors.pillBorder),
-        tonalElevation = 0.dp,
-        shadowElevation = 8.dp,
-        content = content,
-    )
-}
-
-@Composable
-private fun ToolRailButton(
-    icon: ImageVector,
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    ToolRailButton(
-        painter = rememberVectorPainter(icon),
-        label = label,
-        selected = selected,
-        onClick = onClick,
-    )
-}
-
-@Composable
-private fun ToolRailButton(
-    painter: Painter,
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(12.dp),
-        color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-        modifier = Modifier.size(44.dp),
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(
-                painter = painter,
-                contentDescription = label,
-                tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
     }
 }

@@ -9,24 +9,30 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import space.owork.draw.engine.AppTheme
 import space.owork.draw.engine.CanvasBackground
 import space.owork.draw.ui.CanvasScreen
+import space.owork.draw.ui.GlassPill
 import space.owork.draw.ui.SettingsScreen
 import space.owork.draw.ui.WorkspaceScreen
 import space.owork.draw.ui.theme.DrawspaceTheme
+import space.owork.draw.ui.theme.LocalGlass
 
 class MainActivity : ComponentActivity() {
     private val viewModel: DrawspaceViewModel by viewModels()
@@ -74,8 +80,19 @@ class MainActivity : ComponentActivity() {
                     snackbarHost = {
                         SnackbarHost(
                             hostState = snackbarHostState,
-                            modifier = Modifier.padding(bottom = if (state.activeDocument != null && !state.showSettings) 78.dp else 0.dp),
-                        )
+                            modifier = Modifier.padding(bottom = if (state.activeDocument != null && !state.showSettings) 78.dp else 16.dp),
+                        ) { data ->
+                            val p = LocalGlass.current
+                            GlassPill(shape = CircleShape) {
+                                Text(
+                                    text = data.visuals.message,
+                                    color = p.text,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp),
+                                )
+                            }
+                        }
                     },
                 ) { _ ->
                     when {

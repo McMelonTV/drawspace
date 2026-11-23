@@ -16,9 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,14 +25,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.RestartAlt
-import androidx.compose.material3.Button
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -51,9 +43,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import space.owork.draw.engine.ColorPalette
 import space.owork.draw.engine.ColorSwatch
-import space.owork.draw.ui.theme.LocalHudColors
+import space.owork.draw.ui.theme.LocalGlass
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -66,7 +59,7 @@ fun ColorPickerSheet(
     onRemoveSwatch: (Int) -> Unit,
     onResetPalette: () -> Unit,
 ) {
-    val hudColors = LocalHudColors.current
+    val p = LocalGlass.current
     val initialHsv = remember(initialColorArgb) {
         FloatArray(3).also { AndroidColor.colorToHSV(initialColorArgb, it) }
     }
@@ -89,26 +82,25 @@ fun ColorPickerSheet(
         onSelectColor(argb)
     }
 
-    StudioModal(
+    GlassModal(
         title = "Color & Palette",
         onDismiss = onDismiss,
-        maxWidth = 600.dp,
+        maxWidth = 580.dp,
         maxHeight = 620.dp,
         headerActions = {
             Box(
                 modifier = Modifier
-                    .size(30.dp)
+                    .size(28.dp)
                     .clip(CircleShape)
                     .background(Color(currentArgb))
-                    .border(2.dp, hudColors.swatchBorder, CircleShape),
+                    .border(2.dp, p.swatchBorder, CircleShape),
             )
-            FilledTonalButton(
+            GlassButton(
+                label = "Save Swatch",
+                icon = Icons.Outlined.Add,
+                height = 34.dp,
                 onClick = { onAddSwatch(currentArgb) },
-            ) {
-                Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Save Swatch")
-            }
+            )
         },
     ) {
         Column(
@@ -117,15 +109,13 @@ fun ColorPickerSheet(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-
-            // 2D Saturation / Value picker pad + Hue bar + Hex input
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(18.dp),
                 verticalAlignment = Alignment.Top,
             ) {
                 Column(
-                    modifier = Modifier.weight(1.2f),
+                    modifier = Modifier.weight(1.25f),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     SvPickerBox(
@@ -142,15 +132,16 @@ fun ColorPickerSheet(
                         onHueChange = { h -> applyHsv(h, sat, value) },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(28.dp),
+                            .height(26.dp),
                     )
                 }
 
                 Column(
-                    modifier = Modifier.weight(0.8f),
+                    modifier = Modifier.weight(0.75f),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    OutlinedTextField(
+                    GlassSectionLabel("Hex")
+                    GlassTextField(
                         value = hexDraft,
                         onValueChange = { raw ->
                             hexDraft = raw.uppercase()
@@ -167,8 +158,7 @@ fun ColorPickerSheet(
                                 }
                             }
                         },
-                        label = { Text("Hex") },
-                        singleLine = true,
+                        placeholder = "#FFFFFF",
                         modifier = Modifier.fillMaxWidth(),
                     )
 
@@ -177,15 +167,15 @@ fun ColorPickerSheet(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         Column(Modifier.weight(1f)) {
-                            Text("Before", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Before", color = p.secondary, fontSize = 11.sp)
                             Spacer(Modifier.height(4.dp))
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(36.dp)
-                                    .clip(RoundedCornerShape(8.dp))
+                                    .clip(RoundedCornerShape(10.dp))
                                     .background(Color(initialColorArgb))
-                                    .border(1.dp, hudColors.swatchBorder, RoundedCornerShape(8.dp))
+                                    .border(1.dp, p.swatchBorder, RoundedCornerShape(10.dp))
                                     .clickable {
                                         val hsv = FloatArray(3)
                                         AndroidColor.colorToHSV(initialColorArgb, hsv)
@@ -194,42 +184,41 @@ fun ColorPickerSheet(
                             )
                         }
                         Column(Modifier.weight(1f)) {
-                            Text("New", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("New", color = p.secondary, fontSize = 11.sp)
                             Spacer(Modifier.height(4.dp))
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(36.dp)
-                                    .clip(RoundedCornerShape(8.dp))
+                                    .clip(RoundedCornerShape(10.dp))
                                     .background(Color(currentArgb))
-                                    .border(1.dp, hudColors.swatchBorder, RoundedCornerShape(8.dp)),
+                                    .border(1.dp, p.swatchBorder, RoundedCornerShape(10.dp)),
                             )
                         }
                     }
                 }
             }
 
-            HorizontalDivider()
+            GlassDivider()
 
-            // Customizable workspace palette
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    "Workspace Palette (${palette.swatches.size})",
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    TextButton(onClick = { editMode = !editMode }) {
-                        Text(if (editMode) "Done" else "Edit")
-                    }
-                    TextButton(onClick = onResetPalette) {
-                        Icon(Icons.Outlined.RestartAlt, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(4.dp))
-                        Text("Reset")
-                    }
+                GlassSectionLabel("Workspace Palette · ${palette.swatches.size}")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    GlassChip(
+                        label = if (editMode) "Done" else "Edit",
+                        selected = editMode,
+                        onClick = { editMode = !editMode },
+                    )
+                    GlassChip(
+                        label = "Reset",
+                        icon = Icons.Outlined.RestartAlt,
+                        selected = false,
+                        onClick = onResetPalette,
+                    )
                 }
             }
 
@@ -247,7 +236,7 @@ fun ColorPickerSheet(
                                 .background(Color(swatch.argb))
                                 .border(
                                     width = if (isSelected) 3.dp else 1.dp,
-                                    color = if (isSelected) MaterialTheme.colorScheme.primary else hudColors.swatchBorder,
+                                    color = if (isSelected) p.active else p.swatchBorder,
                                     shape = CircleShape,
                                 )
                                 .clickable {
@@ -265,7 +254,7 @@ fun ColorPickerSheet(
                                 modifier = Modifier
                                     .size(16.dp)
                                     .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.error),
+                                    .background(p.destructive),
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Icon(
@@ -284,9 +273,7 @@ fun ColorPickerSheet(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
             ) {
-                Button(onClick = onDismiss) {
-                    Text("Done")
-                }
+                GlassButton(label = "Done", primary = true, onClick = onDismiss)
             }
         }
     }
@@ -300,13 +287,14 @@ private fun SvPickerBox(
     onChange: (Float, Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val p = LocalGlass.current
     val hueColor = remember(hue) {
         Color(AndroidColor.HSVToColor(0xFF, floatArrayOf(hue, 1f, 1f)))
     }
     Canvas(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(14.dp))
+            .border(1.dp, p.separator, RoundedCornerShape(14.dp))
             .pointerInput(hue) {
                 detectTapGestures { offset ->
                     val s = (offset.x / size.width).coerceIn(0f, 1f)
@@ -349,6 +337,7 @@ private fun HueSliderBar(
     onHueChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val p = LocalGlass.current
     val rainbow = remember {
         listOf(
             Color(0xFFFF0000),
@@ -362,8 +351,8 @@ private fun HueSliderBar(
     }
     Canvas(
         modifier = modifier
-            .clip(RoundedCornerShape(14.dp))
-            .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(14.dp))
+            .clip(CircleShape)
+            .border(1.dp, p.separator, CircleShape)
             .pointerInput(Unit) {
                 detectTapGestures { offset ->
                     onHueChange((offset.x / size.width).coerceIn(0f, 1f) * 360f)

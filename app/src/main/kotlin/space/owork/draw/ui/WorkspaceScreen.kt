@@ -1,6 +1,8 @@
 package space.owork.draw.ui
 
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,10 +15,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
@@ -24,17 +26,8 @@ import androidx.compose.material.icons.outlined.AllInclusive
 import androidx.compose.material.icons.outlined.CropLandscape
 import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -42,13 +35,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import space.owork.draw.AppUiState
 import space.owork.draw.engine.AppTheme
 import space.owork.draw.engine.CanvasMode
 import space.owork.draw.storage.DocumentSummary
+import space.owork.draw.ui.theme.LocalGlass
+import space.owork.draw.ui.theme.glass
 import java.text.DateFormat
 import java.util.Date
 
@@ -60,18 +59,20 @@ fun WorkspaceScreen(
     onCreateDocument: (String, CanvasMode) -> Unit,
     onDeleteDocument: (String) -> Unit,
 ) {
+    val p = LocalGlass.current
     var showNewDialog by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<DocumentSummary?>(null) }
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background,
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(p.background),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .safeDrawingPadding()
-                .padding(horizontal = 24.dp, vertical = 16.dp),
+                .padding(horizontal = 28.dp, vertical = 18.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -81,12 +82,16 @@ fun WorkspaceScreen(
                 Column {
                     Text(
                         text = "Drawspace",
-                        style = MaterialTheme.typography.headlineMedium,
+                        color = p.text,
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = (-0.7).sp,
                     )
                     Text(
                         text = "${state.documents.size} sketch${if (state.documents.size == 1) "" else "es"}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = p.secondary,
+                        fontSize = 13.sp,
+                        modifier = Modifier.padding(top = 2.dp),
                     )
                 }
 
@@ -94,27 +99,27 @@ fun WorkspaceScreen(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    FilledTonalButton(
+                    GlassButton(
+                        label = "Quick Infinite",
+                        icon = Icons.Outlined.AllInclusive,
                         onClick = { onCreateDocument("Unnamed Sketch", CanvasMode.Infinite) },
-                    ) {
-                        Icon(Icons.Outlined.AllInclusive, contentDescription = null)
-                        Spacer(Modifier.width(6.dp))
-                        Text("Quick Infinite")
-                    }
-
-                    Button(onClick = { showNewDialog = true }) {
-                        Icon(Icons.Outlined.Add, contentDescription = null)
-                        Spacer(Modifier.width(6.dp))
-                        Text("New Sketch")
-                    }
-
-                    IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Outlined.Settings, contentDescription = "Settings")
-                    }
+                    )
+                    GlassButton(
+                        label = "New Sketch",
+                        icon = Icons.Outlined.Add,
+                        primary = true,
+                        onClick = { showNewDialog = true },
+                    )
+                    GlassIconButton(
+                        icon = Icons.Outlined.Settings,
+                        contentDescription = "Settings",
+                        size = 40.dp,
+                        onClick = onOpenSettings,
+                    )
                 }
             }
 
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(24.dp))
 
             if (state.documents.isEmpty()) {
                 Box(
@@ -123,33 +128,34 @@ fun WorkspaceScreen(
                 ) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
                     ) {
                         Text(
                             text = "Start sketching on an infinite canvas or a fixed artboard.",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = p.secondary,
+                            fontSize = 15.sp,
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                            Button(onClick = { onCreateDocument("Unnamed Sketch", CanvasMode.Infinite) }) {
-                                Icon(Icons.Outlined.AllInclusive, contentDescription = null)
-                                Spacer(Modifier.width(8.dp))
-                                Text("Quick Infinite Canvas")
-                            }
-                            FilledTonalButton(onClick = { showNewDialog = true }) {
-                                Icon(Icons.Outlined.CropLandscape, contentDescription = null)
-                                Spacer(Modifier.width(8.dp))
-                                Text("Choose Fixed Size…")
-                            }
+                            GlassButton(
+                                label = "Quick Infinite Canvas",
+                                icon = Icons.Outlined.AllInclusive,
+                                primary = true,
+                                onClick = { onCreateDocument("Unnamed Sketch", CanvasMode.Infinite) },
+                            )
+                            GlassButton(
+                                label = "Choose Fixed Size…",
+                                icon = Icons.Outlined.CropLandscape,
+                                onClick = { showNewDialog = true },
+                            )
                         }
                     }
                 }
             } else {
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 240.dp),
-                    contentPadding = PaddingValues(bottom = 24.dp),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    columns = GridCells.Adaptive(minSize = 256.dp),
+                    contentPadding = PaddingValues(bottom = 28.dp),
+                    horizontalArrangement = Arrangement.spacedBy(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(18.dp),
                 ) {
                     items(state.documents, key = { it.meta.id }) { summary ->
                         DocumentCard(
@@ -175,21 +181,16 @@ fun WorkspaceScreen(
     }
 
     pendingDelete?.let { doc ->
-        AlertDialog(
-            onDismissRequest = { pendingDelete = null },
-            title = { Text("Delete \"${doc.meta.title}\"?") },
-            text = { Text("This removes the sketch from your workspace.") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        pendingDelete = null
-                        onDeleteDocument(doc.meta.id)
-                    },
-                ) { Text("Delete") }
+        GlassConfirmModal(
+            title = "Delete \"${doc.meta.title}\"?",
+            message = "This removes the sketch from your workspace.",
+            confirmLabel = "Delete",
+            destructive = true,
+            onConfirm = {
+                pendingDelete = null
+                onDeleteDocument(doc.meta.id)
             },
-            dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) { Text("Cancel") }
-            },
+            onDismiss = { pendingDelete = null },
         )
     }
 }
@@ -201,6 +202,7 @@ private fun DocumentCard(
     onClick: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    val p = LocalGlass.current
     val modeLabel = when (val mode = summary.meta.canvasMode) {
         CanvasMode.Infinite -> "Infinite"
         is CanvasMode.Fixed -> "${mode.widthPx} × ${mode.heightPx}"
@@ -209,83 +211,89 @@ private fun DocumentCard(
         DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
             .format(Date(summary.meta.updatedAtMs))
     }
+    val cardShape = RoundedCornerShape(18.dp)
 
-    Card(
-        onClick = onClick,
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    Column(
+        modifier = Modifier
+            .shadow(elevation = if (p.isDark) 18.dp else 8.dp, shape = cardShape, clip = false)
+            .glass(cardShape, p, fill = p.elevated, edge = true)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick,
+            ),
     ) {
-        Column {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(150.dp),
-                contentAlignment = Alignment.BottomStart,
-            ) {
-                DocumentThumbnailCanvas(
-                    summary = summary,
-                    appTheme = appTheme,
-                    showPattern = false,
-                    modifier = Modifier.fillMaxSize(),
-                )
-
-                Surface(
-                    modifier = Modifier.padding(10.dp),
-                    shape = RoundedCornerShape(8.dp),
-                    color = Color(0xCC181B21),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Icon(
-                            imageVector = if (summary.meta.canvasMode == CanvasMode.Infinite) {
-                                Icons.Outlined.AllInclusive
-                            } else {
-                                Icons.Outlined.CropLandscape
-                            },
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(14.dp),
-                        )
-                        Text(
-                            text = modeLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White,
-                        )
-                    }
-                }
-            }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(156.dp),
+            contentAlignment = Alignment.BottomStart,
+        ) {
+            DocumentThumbnailCanvas(
+                summary = summary,
+                appTheme = appTheme,
+                showPattern = false,
+                modifier = Modifier.fillMaxSize(),
+            )
 
             Row(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 14.dp, top = 10.dp, end = 6.dp, bottom = 12.dp),
+                    .padding(10.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.65f))
+                    .padding(horizontal = 9.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = summary.meta.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = "${summary.strokeCount} strokes · $dateText",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                IconButton(onClick = onDelete) {
-                    Icon(
-                        Icons.Outlined.DeleteOutline,
-                        contentDescription = "Delete sketch",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                Icon(
+                    imageVector = if (summary.meta.canvasMode == CanvasMode.Infinite) {
+                        Icons.Outlined.AllInclusive
+                    } else {
+                        Icons.Outlined.CropLandscape
+                    },
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(13.dp),
+                )
+                Text(
+                    text = modeLabel,
+                    color = Color.White,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 14.dp, top = 11.dp, end = 10.dp, bottom = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = summary.meta.title,
+                    color = p.text,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = (-0.15).sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "${summary.strokeCount} strokes · $dateText",
+                    color = p.secondary,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+            GlassIconButton(
+                icon = Icons.Outlined.DeleteOutline,
+                contentDescription = "Delete sketch",
+                size = 34.dp,
+                subtle = true,
+                onClick = onDelete,
+            )
         }
     }
 }

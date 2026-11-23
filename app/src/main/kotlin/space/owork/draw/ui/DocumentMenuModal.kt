@@ -12,11 +12,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BookmarkAdd
@@ -26,12 +24,6 @@ import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.ScreenRotationAlt
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -42,15 +34,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import space.owork.draw.AppUiState
 import space.owork.draw.engine.AppTheme
 import space.owork.draw.engine.BackgroundPattern
 import space.owork.draw.engine.CanvasBackground
 import space.owork.draw.engine.CanvasMode
 import space.owork.draw.engine.Document
-import space.owork.draw.ui.theme.LocalHudColors
+import space.owork.draw.ui.theme.LocalGlass
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -75,7 +67,7 @@ fun DocumentMenuModal(
     onExportPng: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
-    val hudColors = LocalHudColors.current
+    val p = LocalGlass.current
     var activeTab by remember { mutableStateOf(DocumentModalTab.DOCUMENT) }
     var draftTitle by remember(doc.title) {
         mutableStateOf(if (doc.title == "Unnamed Sketch") "" else doc.title)
@@ -88,45 +80,19 @@ fun DocumentMenuModal(
     }
     val strokeCount = remember(doc) { doc.visibleStrokes().size }
 
-    StudioModal(
+    GlassModal(
         title = doc.title,
         subtitle = "$modeLabel · $strokeCount strokes",
         onDismiss = onDismiss,
-        maxWidth = 560.dp,
+        maxWidth = 540.dp,
         maxHeight = 620.dp,
     ) {
-        // True uniform 4dp segmented control (using Box + clickable to avoid M3 48dp touch-target bloat)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(11.dp))
-                .background(hudColors.modalTrack)
-                .padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            DocumentModalTab.entries.forEach { tab ->
-                val selected = activeTab == tab
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(7.dp))
-                        .background(if (selected) hudColors.modalActiveTab else Color.Transparent)
-                        .clickable { activeTab = tab }
-                        .padding(vertical = 8.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = tab.label,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = if (selected) {
-                            MaterialTheme.colorScheme.onSurface
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
-                }
-            }
-        }
+        GlassSegmentedTabs(
+            options = DocumentModalTab.entries,
+            selected = activeTab,
+            labelOf = { it.label },
+            onSelect = { activeTab = it },
+        )
 
         Spacer(Modifier.height(16.dp))
 
@@ -139,53 +105,45 @@ fun DocumentMenuModal(
             when (activeTab) {
                 DocumentModalTab.DOCUMENT -> {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            "Sketch Name",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        GlassSectionLabel("Sketch Name")
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            StudioTextField(
+                            GlassTextField(
                                 value = draftTitle,
                                 onValueChange = { draftTitle = it },
                                 placeholder = "Unnamed Sketch",
                                 modifier = Modifier.weight(1f),
                             )
-                            val normalizedDraft = draftTitle.trim().ifEmpty { "Unnamed Sketch" }
-                            StudioInlineButton(
-                                icon = Icons.Outlined.Check,
+                            val normalized = draftTitle.trim().ifEmpty { "Unnamed Sketch" }
+                            GlassButton(
                                 label = "Rename",
-                                enabled = normalizedDraft != doc.title,
+                                icon = Icons.Outlined.Check,
+                                primary = normalized != doc.title,
+                                enabled = normalized != doc.title,
                                 onClick = { onRename(draftTitle) },
                             )
                         }
                     }
 
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(
-                            "Save Named Snapshot",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        GlassSectionLabel("Named Snapshot")
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            StudioTextField(
+                            GlassTextField(
                                 value = snapshotDraft,
                                 onValueChange = { snapshotDraft = it },
                                 placeholder = "e.g. Base colors done",
                                 modifier = Modifier.weight(1f),
                             )
-                            StudioInlineButton(
-                                icon = Icons.Outlined.BookmarkAdd,
+                            GlassButton(
                                 label = "Save",
-                                enabled = true,
+                                icon = Icons.Outlined.BookmarkAdd,
                                 onClick = {
                                     val label = snapshotDraft.trim().ifEmpty { "Snapshot" }
                                     snapshotDraft = ""
@@ -195,27 +153,27 @@ fun DocumentMenuModal(
                         }
                     }
 
-                    HorizontalDivider(color = hudColors.modalDivider)
+                    GlassDivider()
 
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            ModalActionCard(
-                                icon = Icons.Outlined.History,
+                            GlassMenuRow(
                                 title = "Version History",
                                 subtitle = "${state.history.size} checkpoints",
+                                icon = Icons.Outlined.History,
                                 modifier = Modifier.weight(1f),
                                 onClick = {
                                     onDismiss()
                                     onOpenHistory()
                                 },
                             )
-                            ModalActionCard(
-                                icon = Icons.Outlined.Download,
+                            GlassMenuRow(
                                 title = "Export PNG",
                                 subtitle = if (doc.canvasMode is CanvasMode.Fixed) "Full resolution" else "Fitted bounds",
+                                icon = Icons.Outlined.Download,
                                 modifier = Modifier.weight(1f),
                                 onClick = {
                                     onDismiss()
@@ -227,10 +185,10 @@ fun DocumentMenuModal(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            ModalActionCard(
-                                icon = Icons.Outlined.CenterFocusStrong,
+                            GlassMenuRow(
                                 title = "Fit to View",
                                 subtitle = "Zoom ${(state.cameraZoom * 100).roundToInt()}%",
+                                icon = Icons.Outlined.CenterFocusStrong,
                                 modifier = Modifier.weight(1f),
                                 onClick = {
                                     onFitToView()
@@ -238,10 +196,10 @@ fun DocumentMenuModal(
                                 },
                             )
                             if (abs(state.cameraRotationRad) > 0.02f) {
-                                ModalActionCard(
-                                    icon = Icons.Outlined.ScreenRotationAlt,
+                                GlassMenuRow(
                                     title = "Reset Rotation",
                                     subtitle = "Snap back to 0°",
+                                    icon = Icons.Outlined.ScreenRotationAlt,
                                     modifier = Modifier.weight(1f),
                                     onClick = {
                                         onResetRotation()
@@ -249,10 +207,10 @@ fun DocumentMenuModal(
                                     },
                                 )
                             } else {
-                                ModalActionCard(
-                                    icon = Icons.Outlined.Settings,
+                                GlassMenuRow(
                                     title = "App Settings",
                                     subtitle = "AA, theme, stylus",
+                                    icon = Icons.Outlined.Settings,
                                     modifier = Modifier.weight(1f),
                                     onClick = {
                                         onDismiss()
@@ -262,11 +220,10 @@ fun DocumentMenuModal(
                             }
                         }
                         if (abs(state.cameraRotationRad) > 0.02f) {
-                            ModalActionCard(
-                                icon = Icons.Outlined.Settings,
+                            GlassMenuRow(
                                 title = "App Settings",
                                 subtitle = "Anti-aliasing, app theme, stylus & defaults",
-                                modifier = Modifier.fillMaxWidth(),
+                                icon = Icons.Outlined.Settings,
                                 onClick = {
                                     onDismiss()
                                     onOpenSettings()
@@ -280,30 +237,24 @@ fun DocumentMenuModal(
                     val bg = doc.meta.background
 
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            "Canvas Theme (this sketch only)",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        GlassSectionLabel("Canvas Theme (this sketch)")
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            FilterChip(
+                            GlassChip(
+                                label = "Follow App (${state.appTheme.label})",
                                 selected = bg.canvasTheme == null && bg.customPaperColorArgb == null,
                                 onClick = {
                                     onUpdateBackground { it.copy(canvasTheme = null, customPaperColorArgb = null) }
                                 },
-                                label = { Text("Follow App (${state.appTheme.label})") },
                             )
                             AppTheme.entries.forEach { t ->
-                                FilterChip(
+                                GlassChip(
+                                    label = if (t == AppTheme.BLACK) "Black (AMOLED)" else t.label,
                                     selected = bg.canvasTheme == t && bg.customPaperColorArgb == null,
                                     onClick = {
                                         onUpdateBackground { it.copy(canvasTheme = t, customPaperColorArgb = null) }
-                                    },
-                                    label = {
-                                        Text(if (t == AppTheme.BLACK) "Black (AMOLED)" else t.label)
                                     },
                                 )
                             }
@@ -311,11 +262,7 @@ fun DocumentMenuModal(
                     }
 
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            "Custom Paper Color",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        GlassSectionLabel("Custom Paper Color")
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -329,7 +276,7 @@ fun DocumentMenuModal(
                                         .background(Color(swatch.argb))
                                         .border(
                                             width = if (selected) 2.5.dp else 1.dp,
-                                            color = if (selected) MaterialTheme.colorScheme.primary else hudColors.swatchBorder,
+                                            color = if (selected) p.active else p.swatchBorder,
                                             shape = CircleShape,
                                         )
                                         .clickable { onUpdateBackground { it.copy(customPaperColorArgb = swatch.argb) } },
@@ -338,23 +285,19 @@ fun DocumentMenuModal(
                         }
                     }
 
-                    HorizontalDivider(color = hudColors.modalDivider)
+                    GlassDivider()
 
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            "Background Pattern",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        GlassSectionLabel("Background Pattern")
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             BackgroundPattern.entries.forEach { pat ->
-                                FilterChip(
+                                GlassChip(
+                                    label = pat.label,
                                     selected = bg.pattern == pat,
                                     onClick = { onUpdateBackground { it.copy(pattern = pat) } },
-                                    label = { Text(pat.label) },
                                 )
                             }
                         }
@@ -367,14 +310,14 @@ fun DocumentMenuModal(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Column(Modifier.weight(1f)) {
-                                Text("Temporarily hide pattern", style = MaterialTheme.typography.bodyMedium)
+                                Text("Temporarily hide pattern", color = p.text, fontSize = 14.sp)
                                 Text(
-                                    "Hides pattern without changing saved document settings",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    "Keeps your saved grid setup intact",
+                                    color = p.secondary,
+                                    fontSize = 12.sp,
                                 )
                             }
-                            Switch(
+                            GlassToggle(
                                 checked = state.hidePatternTemporarily,
                                 onCheckedChange = { onToggleHidePattern() },
                             )
@@ -385,46 +328,36 @@ fun DocumentMenuModal(
                             horizontalArrangement = Arrangement.spacedBy(20.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    "Spacing: ${bg.spacingPx.roundToInt()} px",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Slider(
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Spacing · ${bg.spacingPx.roundToInt()} px", color = p.secondary, fontSize = 12.sp)
+                                GlassSlider(
                                     value = bg.spacingPx,
                                     onValueChange = { v -> onUpdateBackground { it.copy(spacingPx = v) } },
                                     valueRange = 20f..160f,
+                                    modifier = Modifier.fillMaxWidth(),
                                 )
                             }
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    "Opacity: ${(bg.opacity * 100).roundToInt()}%",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Slider(
+                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text("Opacity · ${(bg.opacity * 100).roundToInt()}%", color = p.secondary, fontSize = 12.sp)
+                                GlassSlider(
                                     value = bg.opacity,
                                     onValueChange = { v -> onUpdateBackground { it.copy(opacity = v) } },
                                     valueRange = 0.05f..0.85f,
+                                    modifier = Modifier.fillMaxWidth(),
                                 )
                             }
                         }
 
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text(
-                                "Pattern Color",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                            GlassSectionLabel("Pattern Color")
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                FilterChip(
+                                GlassChip(
+                                    label = "Auto",
                                     selected = bg.patternColorArgb == null,
                                     onClick = { onUpdateBackground { it.copy(patternColorArgb = null) } },
-                                    label = { Text("Auto") },
                                 )
                                 CanvasBackground.patternColorPresets.forEach { swatch ->
                                     val selected = bg.patternColorArgb == swatch.argb
@@ -435,7 +368,7 @@ fun DocumentMenuModal(
                                             .background(Color(swatch.argb))
                                             .border(
                                                 width = if (selected) 2.5.dp else 1.dp,
-                                                color = if (selected) MaterialTheme.colorScheme.primary else hudColors.swatchBorder,
+                                                color = if (selected) p.active else p.swatchBorder,
                                                 shape = CircleShape,
                                             )
                                             .clickable { onUpdateBackground { it.copy(patternColorArgb = swatch.argb) } },
@@ -451,8 +384,8 @@ fun DocumentMenuModal(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text("Show origin ring", style = MaterialTheme.typography.bodyMedium)
-                            Switch(
+                            Text("Show origin ring", color = p.text, fontSize = 14.sp)
+                            GlassToggle(
                                 checked = bg.showOriginMarker,
                                 onCheckedChange = { checked -> onUpdateBackground { it.copy(showOriginMarker = checked) } },
                             )
@@ -460,82 +393,6 @@ fun DocumentMenuModal(
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-internal fun StudioInlineButton(
-    icon: ImageVector,
-    label: String,
-    enabled: Boolean,
-    onClick: () -> Unit,
-) {
-    val hudColors = LocalHudColors.current
-    val shape = RoundedCornerShape(10.dp)
-    val bg = if (enabled) hudColors.modalActiveTab else hudColors.modalCard
-    val contentColor = if (enabled) {
-        MaterialTheme.colorScheme.onSurface
-    } else {
-        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
-    }
-    Row(
-        modifier = Modifier
-            .height(42.dp)
-            .clip(shape)
-            .background(bg)
-            .border(1.dp, hudColors.modalCardBorder, shape)
-            .clickable(enabled = enabled, onClick = onClick)
-            .padding(horizontal = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Icon(icon, contentDescription = null, tint = contentColor, modifier = Modifier.size(16.dp))
-        Text(label, style = MaterialTheme.typography.labelLarge, color = contentColor)
-    }
-}
-
-@Composable
-private fun ModalActionCard(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-) {
-    val hudColors = LocalHudColors.current
-    val shape = RoundedCornerShape(12.dp)
-    Row(
-        modifier = modifier
-            .clip(shape)
-            .background(hudColors.modalCard)
-            .border(1.dp, hudColors.modalCardBorder, shape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 11.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(34.dp)
-                .clip(RoundedCornerShape(9.dp))
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp),
-            )
-        }
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleSmall)
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 }
