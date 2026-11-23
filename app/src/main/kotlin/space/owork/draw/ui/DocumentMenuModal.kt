@@ -1,6 +1,5 @@
 package space.owork.draw.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,14 +26,11 @@ import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.ScreenRotationAlt
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -97,46 +92,38 @@ fun DocumentMenuModal(
         title = doc.title,
         subtitle = "$modeLabel · $strokeCount strokes",
         onDismiss = onDismiss,
-        maxWidth = 600.dp,
+        maxWidth = 560.dp,
         maxHeight = 620.dp,
     ) {
-        // Recessed segmented tab switcher with concentric radii (14dp outer - 5dp pad = 9dp inner)
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp),
-            color = hudColors.modalTrack,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.75f)),
+        // True uniform 4dp segmented control (using Box + clickable to avoid M3 48dp touch-target bloat)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(11.dp))
+                .background(hudColors.modalTrack)
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(5.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                DocumentModalTab.entries.forEach { tab ->
-                    val selected = activeTab == tab
-                    Surface(
-                        onClick = { activeTab = tab },
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(9.dp),
-                        color = if (selected) hudColors.modalCard else Color.Transparent,
-                        border = if (selected) BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null,
-                    ) {
-                        Box(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = tab.label,
-                                style = MaterialTheme.typography.labelLarge,
-                                color = if (selected) {
-                                    MaterialTheme.colorScheme.onSurface
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                            )
-                        }
-                    }
+            DocumentModalTab.entries.forEach { tab ->
+                val selected = activeTab == tab
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(7.dp))
+                        .background(if (selected) hudColors.modalActiveTab else Color.Transparent)
+                        .clickable { activeTab = tab }
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = tab.label,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (selected) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
                 }
             }
         }
@@ -147,75 +134,73 @@ fun DocumentMenuModal(
             modifier = Modifier
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             when (activeTab) {
                 DocumentModalTab.DOCUMENT -> {
-                    // Inline sketch rename
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        OutlinedTextField(
-                            value = draftTitle,
-                            onValueChange = { draftTitle = it },
-                            label = { Text("Sketch Name") },
-                            placeholder = { Text("Unnamed Sketch") },
-                            shape = RoundedCornerShape(12.dp),
-                            singleLine = true,
-                            modifier = Modifier.weight(1f),
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            "Sketch Name",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        val normalizedDraft = draftTitle.trim().ifEmpty { "Unnamed Sketch" }
-                        FilledTonalButton(
-                            enabled = normalizedDraft != doc.title,
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.height(50.dp),
-                            onClick = { onRename(draftTitle) },
-                        ) {
-                            Icon(Icons.Outlined.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Rename")
-                        }
-                    }
-
-                    // Quick named snapshot
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        OutlinedTextField(
-                            value = snapshotDraft,
-                            onValueChange = { snapshotDraft = it },
-                            label = { Text("Save Named Snapshot") },
-                            placeholder = { Text("e.g. Base colors done") },
-                            shape = RoundedCornerShape(12.dp),
-                            singleLine = true,
-                            modifier = Modifier.weight(1f),
-                        )
-                        FilledTonalButton(
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.height(50.dp),
-                            onClick = {
-                                val label = snapshotDraft.trim().ifEmpty { "Snapshot" }
-                                snapshotDraft = ""
-                                onSaveSnapshot(label)
-                            },
-                        ) {
-                            Icon(Icons.Outlined.BookmarkAdd, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(4.dp))
-                            Text("Save")
-                        }
-                    }
-
-                    HorizontalDivider()
-
-                    // Action cards grid
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            StudioTextField(
+                                value = draftTitle,
+                                onValueChange = { draftTitle = it },
+                                placeholder = "Unnamed Sketch",
+                                modifier = Modifier.weight(1f),
+                            )
+                            val normalizedDraft = draftTitle.trim().ifEmpty { "Unnamed Sketch" }
+                            StudioInlineButton(
+                                icon = Icons.Outlined.Check,
+                                label = "Rename",
+                                enabled = normalizedDraft != doc.title,
+                                onClick = { onRename(draftTitle) },
+                            )
+                        }
+                    }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            "Save Named Snapshot",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            StudioTextField(
+                                value = snapshotDraft,
+                                onValueChange = { snapshotDraft = it },
+                                placeholder = "e.g. Base colors done",
+                                modifier = Modifier.weight(1f),
+                            )
+                            StudioInlineButton(
+                                icon = Icons.Outlined.BookmarkAdd,
+                                label = "Save",
+                                enabled = true,
+                                onClick = {
+                                    val label = snapshotDraft.trim().ifEmpty { "Snapshot" }
+                                    snapshotDraft = ""
+                                    onSaveSnapshot(label)
+                                },
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(color = hudColors.modalDivider)
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             ModalActionCard(
                                 icon = Icons.Outlined.History,
@@ -240,7 +225,7 @@ fun DocumentMenuModal(
                         }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             ModalActionCard(
                                 icon = Icons.Outlined.CenterFocusStrong,
@@ -294,11 +279,10 @@ fun DocumentMenuModal(
                 DocumentModalTab.CANVAS -> {
                     val bg = doc.meta.background
 
-                    // Per-canvas theme (applies ONLY to this sketch's background & surround)
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
                             "Canvas Theme (this sketch only)",
-                            style = MaterialTheme.typography.labelMedium,
+                            style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         FlowRow(
@@ -326,11 +310,10 @@ fun DocumentMenuModal(
                         }
                     }
 
-                    // Custom paper color
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
                             "Custom Paper Color",
-                            style = MaterialTheme.typography.labelMedium,
+                            style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Row(
@@ -355,13 +338,12 @@ fun DocumentMenuModal(
                         }
                     }
 
-                    HorizontalDivider()
+                    HorizontalDivider(color = hudColors.modalDivider)
 
-                    // Pattern selector
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
                             "Background Pattern",
-                            style = MaterialTheme.typography.labelMedium,
+                            style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         FlowRow(
@@ -432,7 +414,7 @@ fun DocumentMenuModal(
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(
                                 "Pattern Color",
-                                style = MaterialTheme.typography.labelMedium,
+                                style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Row(
@@ -483,6 +465,37 @@ fun DocumentMenuModal(
 }
 
 @Composable
+internal fun StudioInlineButton(
+    icon: ImageVector,
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val hudColors = LocalHudColors.current
+    val shape = RoundedCornerShape(10.dp)
+    val bg = if (enabled) hudColors.modalActiveTab else hudColors.modalCard
+    val contentColor = if (enabled) {
+        MaterialTheme.colorScheme.onSurface
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+    }
+    Row(
+        modifier = Modifier
+            .height(42.dp)
+            .clip(shape)
+            .background(bg)
+            .border(1.dp, hudColors.modalCardBorder, shape)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(icon, contentDescription = null, tint = contentColor, modifier = Modifier.size(16.dp))
+        Text(label, style = MaterialTheme.typography.labelLarge, color = contentColor)
+    }
+}
+
+@Composable
 private fun ModalActionCard(
     icon: ImageVector,
     title: String,
@@ -491,32 +504,38 @@ private fun ModalActionCard(
     onClick: () -> Unit,
 ) {
     val hudColors = LocalHudColors.current
-    Surface(
-        onClick = onClick,
-        modifier = modifier,
-        shape = RoundedCornerShape(14.dp),
-        color = hudColors.modalCard,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.75f)),
+    val shape = RoundedCornerShape(12.dp)
+    Row(
+        modifier = modifier
+            .clip(shape)
+            .background(hudColors.modalCard)
+            .border(1.dp, hudColors.modalCardBorder, shape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 11.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(RoundedCornerShape(9.dp))
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(18.dp),
             )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleSmall)
-                Text(
-                    subtitle,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleSmall)
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

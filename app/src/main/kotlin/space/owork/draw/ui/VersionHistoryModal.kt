@@ -1,6 +1,6 @@
 package space.owork.draw.ui
 
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,17 +13,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BookmarkAdd
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -57,42 +52,36 @@ fun VersionHistoryModal(
         title = "Version History",
         subtitle = "${state.history.size} saved checkpoints · added strokes highlighted",
         onDismiss = onDismiss,
-        maxWidth = 600.dp,
+        maxWidth = 580.dp,
         maxHeight = 620.dp,
     ) {
-        // Inline Save Named Snapshot bar
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            OutlinedTextField(
+            StudioTextField(
                 value = snapshotLabel,
                 onValueChange = { snapshotLabel = it },
-                placeholder = { Text("Name a new snapshot…") },
-                shape = RoundedCornerShape(12.dp),
-                singleLine = true,
+                placeholder = "Name a new snapshot…",
                 modifier = Modifier.weight(1f),
             )
-            FilledTonalButton(
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.height(50.dp),
+            StudioInlineButton(
+                icon = Icons.Outlined.BookmarkAdd,
+                label = "Save",
+                enabled = true,
                 onClick = {
                     val label = snapshotLabel.trim().ifEmpty { "Snapshot" }
                     snapshotLabel = ""
                     onSaveSnapshot(label)
                 },
-            ) {
-                Icon(Icons.Outlined.BookmarkAdd, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Save")
-            }
+            )
         }
 
-        Spacer(Modifier.size(14.dp))
+        Spacer(Modifier.height(14.dp))
 
         LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(max = 420.dp),
@@ -124,70 +113,69 @@ fun VersionHistoryModal(
                     DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.MEDIUM)
                         .format(Date(cp.timestampMs))
                 }
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = hudColors.modalCard,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)),
-                    modifier = Modifier.fillMaxWidth(),
+                val cardShape = RoundedCornerShape(12.dp)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(cardShape)
+                        .background(hudColors.modalCard)
+                        .border(1.dp, hudColors.modalCardBorder, cardShape)
+                        .padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Row(
-                        modifier = Modifier.padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    Box(
+                        modifier = Modifier
+                            .size(width = 92.dp, height = 58.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .border(1.dp, hudColors.modalCardBorder, RoundedCornerShape(8.dp)),
+                        contentAlignment = Alignment.Center,
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(width = 96.dp, height = 62.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(8.dp)),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            if (preview != null) {
-                                DocumentThumbnailCanvas(
-                                    summary = preview,
-                                    appTheme = state.appTheme,
-                                    highlightStrokeIds = addedIds,
-                                    highlightColor = MaterialTheme.colorScheme.primary,
-                                    fixedArtboardPaddingDp = 4f,
-                                    showPattern = false,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
-                            } else {
-                                Text(
-                                    "…",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                text = if (cp.isNamedSnapshot) "★ ${cp.label}" else cp.label,
-                                style = MaterialTheme.typography.bodyMedium,
+                        if (preview != null) {
+                            DocumentThumbnailCanvas(
+                                summary = preview,
+                                appTheme = state.appTheme,
+                                highlightStrokeIds = addedIds,
+                                highlightColor = MaterialTheme.colorScheme.primary,
+                                fixedArtboardPaddingDp = 4f,
+                                showPattern = false,
+                                modifier = Modifier.fillMaxSize(),
                             )
-                            val stats = buildString {
-                                append(ts)
-                                if (preview != null) {
-                                    append(" · ${preview.strokeCount} strokes")
-                                    if (addedIds.isNotEmpty()) append(" (+${addedIds.size})")
-                                    if (removedCount > 0) append(" (-$removedCount)")
-                                }
-                            }
+                        } else {
                             Text(
-                                text = stats,
+                                "…",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        TextButton(
-                            onClick = {
-                                onDismiss()
-                                onRestoreCheckpoint(cp)
-                            },
-                        ) {
-                            Text("Restore")
+                    }
+
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = if (cp.isNamedSnapshot) "★ ${cp.label}" else cp.label,
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        val stats = buildString {
+                            append(ts)
+                            if (preview != null) {
+                                append(" · ${preview.strokeCount} strokes")
+                                if (addedIds.isNotEmpty()) append(" (+${addedIds.size})")
+                                if (removedCount > 0) append(" (-$removedCount)")
+                            }
                         }
+                        Text(
+                            text = stats,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    TextButton(
+                        onClick = {
+                            onDismiss()
+                            onRestoreCheckpoint(cp)
+                        },
+                    ) {
+                        Text("Restore")
                     }
                 }
             }

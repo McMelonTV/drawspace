@@ -1,29 +1,36 @@
 package space.owork.draw.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -31,14 +38,14 @@ import androidx.compose.ui.window.DialogProperties
 import space.owork.draw.ui.theme.LocalHudColors
 
 /**
- * Tablet-first centered modal with crisp neutral studio colors (zero M3 tonal tint washout).
+ * Clean neutral studio modal with hairline borders and zero M3 tonal washout.
  */
 @Composable
 fun StudioModal(
     title: String,
     subtitle: String? = null,
     onDismiss: () -> Unit,
-    maxWidth: Dp = 580.dp,
+    maxWidth: Dp = 560.dp,
     maxHeight: Dp = 640.dp,
     headerActions: @Composable RowScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
@@ -54,22 +61,22 @@ fun StudioModal(
                 .widthIn(min = 340.dp, max = maxWidth)
                 .heightIn(max = maxHeight)
                 .fillMaxWidth(),
-            shape = RoundedCornerShape(22.dp),
+            shape = RoundedCornerShape(18.dp),
             color = hudColors.modalBackground,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            border = BorderStroke(1.dp, hudColors.modalBorder),
             tonalElevation = 0.dp,
-            shadowElevation = 24.dp,
+            shadowElevation = 28.dp,
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 22.dp, end = 16.dp, top = 16.dp, bottom = 14.dp),
+                        .padding(start = 20.dp, end = 16.dp, top = 16.dp, bottom = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(text = title, style = MaterialTheme.typography.titleLarge)
+                        Text(text = title, style = MaterialTheme.typography.titleMedium)
                         if (subtitle != null) {
                             Text(
                                 text = subtitle,
@@ -83,32 +90,70 @@ fun StudioModal(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         headerActions()
-                        Surface(
-                            shape = CircleShape,
-                            color = hudColors.modalCard,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.7f)),
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .background(hudColors.modalCard)
+                                .clickable(onClick = onDismiss),
+                            contentAlignment = Alignment.Center,
                         ) {
-                            IconButton(
-                                onClick = onDismiss,
-                                modifier = Modifier.size(34.dp),
-                            ) {
-                                Icon(
-                                    Icons.Outlined.Close,
-                                    contentDescription = "Close",
-                                    modifier = Modifier.size(18.dp),
-                                )
-                            }
+                            Icon(
+                                Icons.Outlined.Close,
+                                contentDescription = "Close",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(17.dp),
+                            )
                         }
                     }
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.75f))
+                HorizontalDivider(color = hudColors.modalDivider)
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 22.dp, vertical = 18.dp),
+                        .padding(horizontal = 20.dp, vertical = 18.dp),
                     content = content,
                 )
             }
         }
+    }
+}
+
+/**
+ * Compact web-inspired single-line input field matching our studio modal surface language.
+ */
+@Composable
+fun StudioTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+) {
+    val hudColors = LocalHudColors.current
+    val shape = RoundedCornerShape(10.dp)
+    Box(
+        modifier = modifier
+            .height(42.dp)
+            .clip(shape)
+            .background(hudColors.modalInputBackground)
+            .border(1.dp, hudColors.modalCardBorder, shape)
+            .padding(horizontal = 12.dp),
+        contentAlignment = Alignment.CenterStart,
+    ) {
+        if (value.isEmpty()) {
+            Text(
+                text = placeholder,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            )
+        }
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            textStyle = MaterialTheme.typography.bodyMedium.copy(color = MaterialTheme.colorScheme.onSurface),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
