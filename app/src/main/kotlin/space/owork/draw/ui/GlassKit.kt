@@ -176,7 +176,7 @@ fun GlassSectionLabel(
         color = p.secondary,
         fontSize = 12.5.sp,
         fontWeight = FontWeight.SemiBold,
-        letterSpacing = (-0.15).sp,
+        letterSpacing = 0.2.sp,
         modifier = modifier,
     )
 }
