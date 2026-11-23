@@ -325,13 +325,21 @@ private fun GlassSettingsCard(
     val p = LocalGlass.current
     val shape = RoundedCornerShape(20.dp)
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .glassSurface(shape, p, fill = p.elevated, bordered = true)
-            .padding(20.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        GlassSectionLabel(title)
-        content()
+        GlassSectionLabel(
+            text = title,
+            modifier = Modifier.padding(start = 8.dp),
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .glassSurface(shape, p, fill = p.elevated, bordered = true)
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            content()
+        }
     }
 }
