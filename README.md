@@ -2,7 +2,30 @@
 
 # Drawspace
 
+[![CI](https://github.com/McMelonTV/drawspace/actions/workflows/ci.yml/badge.svg)](https://github.com/McMelonTV/drawspace/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/McMelonTV/drawspace)](https://github.com/McMelonTV/drawspace/releases/latest)
+[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-blue)](LICENSE)
+
 Native Android tablet sketching app with low-latency stylus input (OpenGL ES 3.0 + Jetpack `GLFrontBufferedRenderer`) and an automatic bare-Git storage backend.
+
+![Drawing on an infinite canvas with the isometric grid](docs/screenshots/canvas.png)
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/workspace.png" alt="Workspace with sketch thumbnails"></td>
+    <td><img src="docs/screenshots/new-sketch.png" alt="New sketch dialog with fixed-size presets"></td>
+    <td><img src="docs/screenshots/settings.png" alt="Settings screen"></td>
+  </tr>
+  <tr>
+    <td align="center">Workspace</td>
+    <td align="center">Fixed-size presets</td>
+    <td align="center">Settings</td>
+  </tr>
+</table>
+
+## Install
+
+Download the latest signed APK from [Releases](https://github.com/McMelonTV/drawspace/releases/latest) and install it on an Android 12+ (API 31) tablet. Drawspace is built for tablets with a stylus, but works with touch too.
 
 ## Features
 
@@ -33,3 +56,15 @@ Requires JDK 17+ and Android SDK 36 (`minSdk = 31`).
 # Install on a connected tablet
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
+
+## Releasing
+
+1. Bump `versionCode` and `versionName` in `app/build.gradle.kts`.
+2. Optionally add release notes at `docs/release-notes/vX.Y.Z.md` (otherwise GitHub generates them).
+3. Push a matching tag: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+
+The [Release workflow](.github/workflows/release.yml) runs the tests, builds a release APK signed with the key stored in the repository secrets, and publishes it with a `SHA256SUMS.txt`.
+
+## License
+
+Drawspace is free software, released under the [GNU General Public License v3.0](LICENSE).

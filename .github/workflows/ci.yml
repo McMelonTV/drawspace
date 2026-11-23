@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Test & build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          # 17 for the JVM module toolchains, 21 to run Gradle.
+          java-version: |
+            17
+            21
+
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Unit tests
+        run: ./gradlew :engine:test :storage:test --console=plain
+
+      - name: Build debug APK
+        run: ./gradlew :app:assembleDebug --console=plain
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v5
+        with:
+          name: test-reports
+          path: '*/build/reports/tests/'
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v5
+        with:
+          name: drawspace-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14

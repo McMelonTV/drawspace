@@ -15,8 +15,25 @@ android {
         versionName = "0.1.0"
     }
 
+    // Release signing comes from environment variables (set by CI from repository secrets).
+    // Without them, `assembleRelease` still builds, but the APK is unsigned.
+    val releaseKeystore = System.getenv("DRAWSPACE_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("DRAWSPACE_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("DRAWSPACE_KEY_ALIAS")
+                keyPassword = System.getenv("DRAWSPACE_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (releaseKeystore != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
