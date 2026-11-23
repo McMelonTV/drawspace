@@ -94,6 +94,7 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
     private val commandStack = CommandStack()
     private val pendingDeltas = ArrayList<DocumentDelta>()
     private val inFlightPreviewIds = HashSet<String>()
+    private val sessionDocuments = HashMap<String, Document>()
     private var strokesSinceCheckpoint = 0
     private var hasDirtyBackground = false
     private var walFlushJob: Job? = null
@@ -161,26 +162,39 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun createAndOpenDocument(title: String, mode: CanvasMode) {
+        val s = _uiState.value.settings
+        val bg = CanvasBackground(
+            canvasTheme = null,
+            pattern = s.defaultPattern,
+            spacingPx = s.defaultPatternSpacingPx,
+        )
+        // Enter canvas immediately (0ms) and persist creation commit asynchronously.
+        val doc = Document.createNew(title = title.trim().ifEmpty { "Unnamed Sketch" }, canvasMode = mode, background = bg)
+        sessionDocuments[doc.id] = doc
+        commandStack.clear()
+        strokesSinceCheckpoint = 0
+        openDocumentSync(doc)
+
         viewModelScope.launch {
-            val s = _uiState.value.settings
-            val bg = CanvasBackground(
-                canvasTheme = null, // Default to following App Theme
-                pattern = s.defaultPattern,
-                spacingPx = s.defaultPatternSpacingPx,
-            )
-            val doc = store.createDocument(title, mode, background = bg)
-            commandStack.clear()
-            strokesSinceCheckpoint = 0
+            store.checkpoint(doc, label = "Create sketch: ${doc.title}", isNamedSnapshot = true)
             refreshWorkspace()
-            openDocumentInternal(doc)
+            val history = store.listHistory(doc.id)
+            _uiState.update { st -> if (st.activeDocument?.id == doc.id) st.copy(history = history) else st }
         }
     }
 
     fun openDocument(documentId: String) {
+        // Fast path: if already in memory this session, enter CanvasScreen synchronously on this frame!
+        sessionDocuments[documentId]?.let { cached ->
+            strokesSinceCheckpoint = 0
+            openDocumentSync(cached)
+            return
+        }
         viewModelScope.launch {
             val doc = store.loadDocument(documentId)
+            sessionDocuments[doc.id] = doc
             strokesSinceCheckpoint = 0
-            openDocumentInternal(doc)
+            openDocumentSync(doc)
         }
     }
 
@@ -190,6 +204,7 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
             val cleaned = newTitle.trim().ifEmpty { "Unnamed Sketch" }
             if (cleaned == doc.title) return@launch
             val renamed = doc.copy(meta = doc.meta.copy(title = cleaned, updatedAtMs = System.currentTimeMillis()))
+            sessionDocuments[renamed.id] = renamed
             _uiState.update { it.copy(activeDocument = renamed, saveStatus = "Saving…") }
             store.checkpoint(renamed, label = "Renamed to $cleaned", isNamedSnapshot = false)
             val history = store.listHistory(renamed.id)
@@ -244,9 +259,12 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun deleteDocument(documentId: String) {
+        sessionDocuments.remove(documentId)
+        _uiState.update { state ->
+            state.copy(documents = state.documents.filterNot { it.meta.id == documentId })
+        }
         viewModelScope.launch {
             store.deleteDocument(documentId)
-            refreshWorkspace()
         }
     }
 
@@ -261,6 +279,7 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
                 updatedAtMs = System.currentTimeMillis(),
             ),
         )
+        sessionDocuments[updated.id] = updated
         _uiState.update { state ->
             state.copy(
                 activeDocument = updated,
@@ -504,6 +523,7 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             val currentDoc = _uiState.value.activeDocument ?: return@launch
             val restored = store.loadDocumentAtCheckpoint(currentDoc.id, checkpoint.id)
+            sessionDocuments[restored.id] = restored
             commandStack.restore(restored.undoStack)
             pendingDeltas.clear()
             strokesSinceCheckpoint = 0
@@ -572,7 +592,8 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
         super.onCleared()
     }
 
-    private suspend fun openDocumentInternal(doc: Document) {
+    private fun openDocumentSync(doc: Document) {
+        sessionDocuments[doc.id] = doc
         commandStack.restore(doc.undoStack)
         inFlightPreviewIds.clear()
         // Transition to canvas immediately without blocking on RevWalk history traversal.
@@ -600,6 +621,7 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     private fun applyMutation(nextDoc: Document, delta: DocumentDelta) {
+        sessionDocuments[nextDoc.id] = nextDoc
         pendingDeltas.add(delta)
         strokesSinceCheckpoint++
         _uiState.update {

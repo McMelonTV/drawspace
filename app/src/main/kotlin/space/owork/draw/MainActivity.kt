@@ -75,6 +75,9 @@ class MainActivity : ComponentActivity() {
                 BackHandler(enabled = state.showSettings) {
                     viewModel.closeSettings()
                 }
+                BackHandler(enabled = state.activeDocument != null && !state.showSettings) {
+                    viewModel.closeDocumentToWorkspace()
+                }
 
                 Scaffold(
                     snackbarHost = {
@@ -95,60 +98,63 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                 ) { _ ->
-                    when {
-                        state.isLoading -> {
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator()
+                    Box(Modifier.fillMaxSize()) {
+                        when {
+                            state.isLoading -> {
+                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    CircularProgressIndicator()
+                                }
+                            }
+
+                            state.activeDocument != null -> {
+                                CanvasScreen(
+                                    state = state,
+                                    onBack = viewModel::closeDocumentToWorkspace,
+                                    onOpenSettings = viewModel::openSettings,
+                                    onRename = viewModel::renameActiveDocument,
+                                    onSelectTool = viewModel::selectTool,
+                                    onSelectColor = viewModel::selectColor,
+                                    onAddSwatch = viewModel::addColorToPalette,
+                                    onRemoveSwatch = viewModel::removeSwatchAt,
+                                    onResetPalette = viewModel::resetPaletteToDefaults,
+                                    onSizeChange = viewModel::updateBrushSize,
+                                    onOpacityChange = viewModel::updateBrushOpacity,
+                                    onToggleFingerDrawing = viewModel::toggleFingerDrawing,
+                                    onToggleSnapLineAngles = viewModel::toggleSnapLineAngles,
+                                    onToggleSnapLineToGrid = viewModel::toggleSnapLineToGrid,
+                                    onToggleHidePattern = viewModel::toggleHidePatternTemporarily,
+                                    onCycleLockMode = viewModel::cycleLockMode,
+                                    onUpdateBackground = viewModel::updateCanvasBackground,
+                                    onUndo = viewModel::undo,
+                                    onRedo = viewModel::redo,
+                                    onStrokeCommitted = viewModel::onStrokeCommitted,
+                                    onStrokesErased = viewModel::onStrokesErased,
+                                    onBucketFillRequested = viewModel::onBucketFillRequested,
+                                    onCameraChanged = viewModel::onCameraChanged,
+                                    onSaveSnapshot = viewModel::saveNamedSnapshot,
+                                    onRestoreCheckpoint = viewModel::restoreCheckpoint,
+                                    onRequestCheckpointPreview = viewModel::loadCheckpointPreview,
+                                    onExportPng = viewModel::exportActiveDocumentPng,
+                                )
+                            }
+
+                            else -> {
+                                WorkspaceScreen(
+                                    state = state,
+                                    onOpenSettings = viewModel::openSettings,
+                                    onOpenDocument = viewModel::openDocument,
+                                    onCreateDocument = viewModel::createAndOpenDocument,
+                                    onDeleteDocument = viewModel::deleteDocument,
+                                )
                             }
                         }
 
-                        state.showSettings -> {
+                        // Overlay Settings on top so CanvasScreen keeps its GL context & VBOs warm underneath!
+                        if (state.showSettings) {
                             SettingsScreen(
                                 settings = state.settings,
                                 onBack = viewModel::closeSettings,
                                 onUpdateSettings = viewModel::updateSettings,
-                            )
-                        }
-
-                        state.activeDocument != null -> {
-                            CanvasScreen(
-                                state = state,
-                                onBack = viewModel::closeDocumentToWorkspace,
-                                onOpenSettings = viewModel::openSettings,
-                                onRename = viewModel::renameActiveDocument,
-                                onSelectTool = viewModel::selectTool,
-                                onSelectColor = viewModel::selectColor,
-                                onAddSwatch = viewModel::addColorToPalette,
-                                onRemoveSwatch = viewModel::removeSwatchAt,
-                                onResetPalette = viewModel::resetPaletteToDefaults,
-                                onSizeChange = viewModel::updateBrushSize,
-                                onOpacityChange = viewModel::updateBrushOpacity,
-                                onToggleFingerDrawing = viewModel::toggleFingerDrawing,
-                                onToggleSnapLineAngles = viewModel::toggleSnapLineAngles,
-                                onToggleSnapLineToGrid = viewModel::toggleSnapLineToGrid,
-                                onToggleHidePattern = viewModel::toggleHidePatternTemporarily,
-                                onCycleLockMode = viewModel::cycleLockMode,
-                                onUpdateBackground = viewModel::updateCanvasBackground,
-                                onUndo = viewModel::undo,
-                                onRedo = viewModel::redo,
-                                onStrokeCommitted = viewModel::onStrokeCommitted,
-                                onStrokesErased = viewModel::onStrokesErased,
-                                onBucketFillRequested = viewModel::onBucketFillRequested,
-                                onCameraChanged = viewModel::onCameraChanged,
-                                onSaveSnapshot = viewModel::saveNamedSnapshot,
-                                onRestoreCheckpoint = viewModel::restoreCheckpoint,
-                                onRequestCheckpointPreview = viewModel::loadCheckpointPreview,
-                                onExportPng = viewModel::exportActiveDocumentPng,
-                            )
-                        }
-
-                        else -> {
-                            WorkspaceScreen(
-                                state = state,
-                                onOpenSettings = viewModel::openSettings,
-                                onOpenDocument = viewModel::openDocument,
-                                onCreateDocument = viewModel::createAndOpenDocument,
-                                onDeleteDocument = viewModel::deleteDocument,
                             )
                         }
                     }

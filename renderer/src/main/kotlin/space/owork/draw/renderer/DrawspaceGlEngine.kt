@@ -543,7 +543,9 @@ internal class DrawspaceGlEngine {
 
     private fun getOrBuildVbo(stroke: Stroke): CachedVbo {
         strokeCache[stroke.id]?.let { return it }
-        val vertices = StrokeMeshBuilder.buildRibbon(stroke)
+        val vertices = synchronized(sharedMeshCache) {
+            sharedMeshCache.getOrPut(stroke.id) { StrokeMeshBuilder.buildRibbon(stroke) }
+        }
         val ids = IntArray(1)
         GLES30.glGenBuffers(1, ids, 0)
         val vboId = ids[0]
@@ -678,6 +680,12 @@ internal class DrawspaceGlEngine {
     }
 
     companion object {
+        // Reuses tessellated stroke meshes across SurfaceView detach/reattach cycles so reopening
+        // a sketch skips CPU curve subdivision completely.
+        private val sharedMeshCache = object : LinkedHashMap<String, FloatArray>(256, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, FloatArray>?): Boolean = size > 2000
+        }
+
         private val STROKE_VERTEX_SHADER = """
             #version 300 es
             precision highp float;
