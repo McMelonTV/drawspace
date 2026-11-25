@@ -122,9 +122,6 @@ class MainActivity : ComponentActivity() {
                                     onToggleFingerDrawing = viewModel::toggleFingerDrawing,
                                     onToggleSnapLineAngles = viewModel::toggleSnapLineAngles,
                                     onToggleSnapLineToGrid = viewModel::toggleSnapLineToGrid,
-                                    onTogglePressureEraser = {
-                                        viewModel.updateSettings { it.copy(pressureEraser = !it.pressureEraser) }
-                                    },
                                     onToggleHidePattern = viewModel::toggleHidePatternTemporarily,
                                     onCycleLockMode = viewModel::cycleLockMode,
                                     onUpdateBackground = viewModel::updateCanvasBackground,

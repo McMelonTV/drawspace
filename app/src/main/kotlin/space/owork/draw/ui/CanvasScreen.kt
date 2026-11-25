@@ -86,7 +86,6 @@ fun CanvasScreen(
     onToggleFingerDrawing: () -> Unit,
     onToggleSnapLineAngles: () -> Unit,
     onToggleSnapLineToGrid: () -> Unit,
-    onTogglePressureEraser: () -> Unit,
     onToggleHidePattern: () -> Unit,
     onCycleLockMode: () -> Unit,
     onUpdateBackground: ((CanvasBackground) -> CanvasBackground) -> Unit,
@@ -489,14 +488,6 @@ fun CanvasScreen(
                         color = p.secondary,
                         fontSize = 12.5.sp,
                         fontWeight = FontWeight.SemiBold,
-                    )
-                }
-
-                if (state.activeTool == ToolType.ERASER) {
-                    GlassChip(
-                        label = "Hold to Erase",
-                        selected = state.settings.pressureEraser,
-                        onClick = onTogglePressureEraser,
                     )
                 }
 
