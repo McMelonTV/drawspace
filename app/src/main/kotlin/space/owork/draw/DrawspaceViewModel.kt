@@ -76,6 +76,10 @@ data class AppUiState(
             return if (activeTool == ToolType.ERASER) base else base.copy(colorArgb = activeColorArgb)
         }
 
+    /** The user's eraser settings, used for the stylus eraser end and press-and-hold erasing. */
+    val eraserBrush: BrushSpec
+        get() = toolBrushes[ToolType.ERASER] ?: BrushSpec.defaultFor(ToolType.ERASER)
+
     companion object {
         const val DEFAULT_LIGHT_INK: Int = 0xFF181A1F.toInt()
         const val DEFAULT_DARK_INK: Int = 0xFFF7F7F5.toInt()

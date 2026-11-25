@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -241,6 +242,49 @@ fun SettingsScreen(
                             checked = settings.stylusOnlyDefault,
                             onCheckedChange = { enabled -> onUpdateSettings { it.copy(stylusOnlyDefault = enabled) } },
                         )
+                    }
+
+                    GlassDivider(Modifier.padding(vertical = 4.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+                            Text("Pressure Eraser", color = p.text, fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "Hold the pen still, then press firmly to switch to the eraser; lift to go back to writing.",
+                                color = p.secondary,
+                                fontSize = 12.5.sp,
+                            )
+                        }
+                        GlassToggle(
+                            checked = settings.pressureEraser,
+                            onCheckedChange = { enabled -> onUpdateSettings { it.copy(pressureEraser = enabled) } },
+                        )
+                    }
+
+                    if (settings.pressureEraser) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("Press Threshold", color = p.secondary, fontSize = 12.5.sp)
+                            GlassSlider(
+                                value = settings.pressureEraserThreshold,
+                                onValueChange = { v -> onUpdateSettings { it.copy(pressureEraserThreshold = v) } },
+                                valueRange = 0f..1f,
+                                modifier = Modifier.weight(1f),
+                            )
+                            Text(
+                                "${(settings.pressureEraserThreshold * 100).roundToInt()}%",
+                                color = p.secondary,
+                                fontSize = 12.5.sp,
+                                modifier = Modifier.width(38.dp),
+                            )
+                        }
                     }
 
                     GlassDivider(Modifier.padding(vertical = 4.dp))

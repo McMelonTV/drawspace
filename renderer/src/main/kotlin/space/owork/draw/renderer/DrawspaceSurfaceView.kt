@@ -9,6 +9,7 @@ import androidx.graphics.lowlatency.BufferInfo
 import androidx.graphics.lowlatency.GLFrontBufferedRenderer
 import androidx.graphics.opengl.egl.EGLManager
 import space.owork.draw.engine.AntiAliasingMode
+import space.owork.draw.engine.AppSettings
 import space.owork.draw.engine.AppTheme
 import space.owork.draw.engine.BrushSpec
 import space.owork.draw.engine.CameraLocks
@@ -45,11 +46,16 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
     private val cameraRef = AtomicReference(ViewportCamera())
     private val cameraLocksRef = AtomicReference(CameraLocks())
     private val brushRef = AtomicReference(BrushSpec.defaultFor(space.owork.draw.engine.ToolType.PEN))
+    private val eraserBrushRef = AtomicReference(BrushSpec.defaultFor(space.owork.draw.engine.ToolType.ERASER))
     private val themeRef = AtomicReference(AppTheme.DARK)
     private val aaModeRef = AtomicReference(AntiAliasingMode.HIGH)
     private val smoothingRef = AtomicReference(StrokeSmoothingLevel.LOW)
     @Volatile
     private var roundTurnsAndEndsEnabled = true
+    @Volatile
+    private var pressureEraserEnabled = true
+    @Volatile
+    private var pressureEraserThresholdValue = AppSettings.DEFAULT_PRESSURE_ERASER_THRESHOLD
     @Volatile
     private var snapLineAnglesEnabled = false
     @Volatile
@@ -66,6 +72,8 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
 
     private val glEngine = DrawspaceGlEngine()
     private val liveMesh = IncrementalLiveMesh()
+    private val eraserCursorRef = AtomicReference<EraserCursor?>(null)
+    private val density = resources.displayMetrics.density
     private var frontBufferedRenderer: GLFrontBufferedRenderer<Unit>? = null
 
     private val rendererCallback = object : GLFrontBufferedRenderer.Callback<Unit> {
@@ -86,6 +94,17 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
                 docBounds = doc.meta.canvasMode.bounds,
                 liveMesh = liveMesh,
                 antiAliasing = aaModeRef.get(),
+            )
+            val cursor = eraserCursorRef.get() ?: return
+            glEngine.drawEraserCursor(
+                bufferWidth = bufferInfo.width,
+                bufferHeight = bufferInfo.height,
+                bufferTransform = transform,
+                camera = cameraRef.get(),
+                centerWorldX = cursor.worldX,
+                centerWorldY = cursor.worldY,
+                radiusWorld = cursor.radiusWorld,
+                density = density,
             )
         }
 
@@ -122,8 +141,11 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
             override fun currentCamera(): ViewportCamera = cameraRef.get()
             override fun currentCameraLocks(): CameraLocks = cameraLocksRef.get()
             override fun currentBrush(): BrushSpec = brushRef.get()
+            override fun currentEraserBrush(): BrushSpec = eraserBrushRef.get()
             override fun currentSmoothing(): StrokeSmoothingLevel = smoothingRef.get()
             override fun roundTurnsAndEnds(): Boolean = roundTurnsAndEndsEnabled
+            override fun pressureEraser(): Boolean = pressureEraserEnabled
+            override fun pressureEraserThreshold(): Float = pressureEraserThresholdValue
             override fun snapLineAngles(): Boolean = snapLineAnglesEnabled
             override fun snapLineToGrid(): Boolean = snapLineToGridEnabled
             override fun currentBackground(): CanvasBackground = documentRef.get()?.meta?.background ?: CanvasBackground()
@@ -158,6 +180,8 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
             }
 
             override fun onEraseSample(worldX: Float, worldY: Float, eraserRadiusWorld: Float) {
+                eraserCursorRef.set(EraserCursor(worldX, worldY, eraserRadiusWorld))
+                frontBufferedRenderer?.renderFrontBufferedLayer(Unit)
                 val doc = documentRef.get() ?: return
                 val visible = doc.visibleStrokes()
                 var newlyHit = false
@@ -175,6 +199,9 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
             }
 
             override fun onEraseFinished() {
+                if (eraserCursorRef.getAndSet(null) != null) {
+                    frontBufferedRenderer?.cancel()
+                }
                 if (erasedInGesture.isNotEmpty()) {
                     val batch = erasedInGesture.toList()
                     erasedInGesture.clear()
@@ -229,6 +256,11 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
         brushRef.set(brush)
     }
 
+    /** Eraser used by the stylus eraser end and the press-and-hold pressure eraser. */
+    fun setEraserBrush(brush: BrushSpec) {
+        eraserBrushRef.set(brush)
+    }
+
     fun setAppTheme(theme: AppTheme) {
         val prev = themeRef.getAndSet(theme)
         if (prev != theme) {
@@ -249,6 +281,11 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
 
     fun setRoundTurnsAndEnds(enabled: Boolean) {
         roundTurnsAndEndsEnabled = enabled
+    }
+
+    fun setPressureEraser(enabled: Boolean, threshold: Float) {
+        pressureEraserEnabled = enabled
+        pressureEraserThresholdValue = threshold
     }
 
     fun setSnapLineAngles(enabled: Boolean) {
@@ -345,3 +382,5 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
         listener?.onCameraChanged(cam)
     }
 }
+
+private class EraserCursor(val worldX: Float, val worldY: Float, val radiusWorld: Float)
