@@ -23,6 +23,7 @@ import space.owork.draw.engine.StrokeSmoothingLevel
 import space.owork.draw.engine.ViewportCamera
 import space.owork.draw.engine.WorldPoint
 import space.owork.draw.engine.WorldRect
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -74,12 +75,14 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
 
     private val erasedInGesture = LinkedHashSet<String>()
     private val partialWorkingStrokes = LinkedHashMap<String, Stroke>()
+    private var gestureCandidates: List<Stroke>? = null
     private var gestureEraserMode: EraserMode? = null
     private var hasInitializedCameraForDocId: String? = null
 
     private val glEngine = DrawspaceGlEngine()
     private val liveMesh = IncrementalLiveMesh()
     private val eraserCursorRef = AtomicReference<EraserCursor?>(null)
+    private val multiBufferRenderPending = AtomicBoolean(false)
     private val density = resources.displayMetrics.density
     private var frontBufferedRenderer: GLFrontBufferedRenderer<Unit>? = null
 
@@ -102,17 +105,6 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
                 liveMesh = liveMesh,
                 antiAliasing = aaModeRef.get(),
             )
-            val cursor = eraserCursorRef.get() ?: return
-            glEngine.drawEraserCursor(
-                bufferWidth = bufferInfo.width,
-                bufferHeight = bufferInfo.height,
-                bufferTransform = transform,
-                camera = cameraRef.get(),
-                centerWorldX = cursor.worldX,
-                centerWorldY = cursor.worldY,
-                radiusWorld = cursor.radiusWorld,
-                density = density,
-            )
         }
 
         override fun onDrawMultiBufferedLayer(
@@ -123,7 +115,9 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
             transform: FloatArray,
             params: Collection<Unit>,
         ) {
+            multiBufferRenderPending.set(false)
             val doc = documentRef.get() ?: return
+            val camera = cameraRef.get()
             val pending = pendingStrokesRef.get()
             val partial = activePartialStrokesRef.get()
             val combinedPending = when {
@@ -141,10 +135,23 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
                 document = doc,
                 pendingStrokes = combinedPending,
                 pendingErasedIds = pendingErasedIdsRef.get(),
-                camera = cameraRef.get(),
+                camera = camera,
                 appTheme = themeRef.get(),
                 antiAliasing = aaModeRef.get(),
                 hidePattern = hidePatternEnabled,
+            )
+            // Draw the eraser cursor in the same multi-buffered pass as the erased strokes so
+            // it never blinks when the multi-buffered layer commits or tears on the front buffer.
+            val cursor = eraserCursorRef.get() ?: return
+            glEngine.drawEraserCursor(
+                bufferWidth = bufferInfo.width,
+                bufferHeight = bufferInfo.height,
+                bufferTransform = transform,
+                camera = camera,
+                centerWorldX = cursor.worldX,
+                centerWorldY = cursor.worldY,
+                radiusWorld = cursor.radiusWorld,
+                density = density,
             )
         }
     }
@@ -197,24 +204,27 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
                 if (points.isEmpty()) return
                 val tip = points.last()
                 eraserCursorRef.set(EraserCursor(tip.x, tip.y, eraserRadiusWorld))
-                frontBufferedRenderer?.renderFrontBufferedLayer(Unit)
 
                 val doc = documentRef.get() ?: return
                 val mode = gestureEraserMode ?: eraserModeRef.get().also { gestureEraserMode = it }
-                val visible = doc.visibleStrokes()
-                val pending = pendingStrokesRef.get()
-                val candidates = if (pending.isEmpty()) {
-                    visible
-                } else {
-                    val seen = HashSet<String>(visible.size + pending.size)
-                    val combined = ArrayList<Stroke>(visible.size + pending.size)
-                    for (s in visible) {
-                        if (seen.add(s.id)) combined.add(s)
+                val candidates = gestureCandidates ?: run {
+                    val visible = doc.visibleStrokes()
+                    val pending = pendingStrokesRef.get()
+                    val list = if (pending.isEmpty()) {
+                        visible
+                    } else {
+                        val seen = HashSet<String>(visible.size + pending.size)
+                        val combined = ArrayList<Stroke>(visible.size + pending.size)
+                        for (s in visible) {
+                            if (seen.add(s.id)) combined.add(s)
+                        }
+                        for (s in pending) {
+                            if (seen.add(s.id)) combined.add(s)
+                        }
+                        combined
                     }
-                    for (s in pending) {
-                        if (seen.add(s.id)) combined.add(s)
-                    }
-                    combined
+                    gestureCandidates = list
+                    list
                 }
 
                 val segmentCount = if (points.size == 1) 1 else points.lastIndex
@@ -284,15 +294,15 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
                     if (mode == EraserMode.PARTIAL) {
                         activePartialStrokesRef.set(partialWorkingStrokes.values.toList())
                     }
-                    requestFullRedraw()
                 }
+                // Coalesced multi-buffered redraw updates the cursor ring and carved strokes in lockstep.
+                requestFullRedraw()
             }
 
             override fun onEraseFinished() {
-                if (eraserCursorRef.getAndSet(null) != null) {
-                    frontBufferedRenderer?.cancel()
-                }
+                val hadCursor = eraserCursorRef.getAndSet(null) != null
                 gestureEraserMode = null
+                gestureCandidates = null
                 if (erasedInGesture.isNotEmpty()) {
                     val removedIds = erasedInGesture.toList()
                     val replacements = partialWorkingStrokes.values.toList()
@@ -306,6 +316,9 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
                 } else {
                     partialWorkingStrokes.clear()
                     activePartialStrokesRef.set(emptyList())
+                }
+                if (hadCursor) {
+                    requestFullRedraw()
                 }
             }
 
@@ -349,6 +362,7 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
         if (isNewDoc) {
             erasedInGesture.clear()
             partialWorkingStrokes.clear()
+            gestureCandidates = null
             gestureEraserMode = null
             pendingStrokesRef.set(emptyList())
             activePartialStrokesRef.set(emptyList())
@@ -447,7 +461,10 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
     }
 
     fun requestFullRedraw() {
-        frontBufferedRenderer?.renderMultiBufferedLayer(emptyList())
+        val renderer = frontBufferedRenderer ?: return
+        if (multiBufferRenderPending.compareAndSet(false, true)) {
+            renderer.renderMultiBufferedLayer(emptyList())
+        }
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -463,6 +480,7 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
+        multiBufferRenderPending.set(false)
         frontBufferedRenderer = GLFrontBufferedRenderer(this, rendererCallback)
         if (documentRef.get() != null) {
             requestFullRedraw()
@@ -470,6 +488,7 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
     }
 
     override fun onDetachedFromWindow() {
+        multiBufferRenderPending.set(false)
         val renderer = frontBufferedRenderer
         frontBufferedRenderer = null
         renderer?.execute {

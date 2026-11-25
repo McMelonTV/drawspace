@@ -229,7 +229,7 @@ internal class StylusInputRouter(
         activeBrush = effectiveBrush
         isErasing = effectiveBrush.tool == ToolType.ERASER
 
-        if (effectiveBrush.tool != ToolType.FILL) {
+        if (effectiveBrush.tool != ToolType.FILL && !isErasing) {
             // Deliver unbatched digitizer samples straight to front-buffered ink for lower latency and steadier prediction.
             hostView.requestUnbufferedDispatch(event)
         }

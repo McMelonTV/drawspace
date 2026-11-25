@@ -96,6 +96,15 @@ object PartialEraser {
         for (i in 0 until pts.lastIndex) {
             val p0 = pts[i]
             val p1 = pts[i + 1]
+            if (max(p0.x, p1.x) < capBounds.left || min(p0.x, p1.x) > capBounds.right ||
+                max(p0.y, p1.y) < capBounds.top || min(p0.y, p1.y) > capBounds.bottom
+            ) {
+                if (current == null) {
+                    current = ArrayList<StrokePoint>().apply { add(p0) }
+                }
+                appendToCurrent(p1)
+                continue
+            }
             val hit = segmentCapsuleInterval(p0.x, p0.y, p1.x, p1.y, ax, ay, bx, by, cutRadius)
             if (hit == null || hit.second - hit.first <= EPS) {
                 // Segment is completely outside the capsule
