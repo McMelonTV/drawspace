@@ -44,6 +44,7 @@ import space.owork.draw.engine.BackgroundPattern
 import space.owork.draw.engine.CanvasLockMode
 import space.owork.draw.engine.EraserMode
 import space.owork.draw.engine.StrokeSmoothingLevel
+import space.owork.draw.engine.StylusButtonAction
 import space.owork.draw.ui.theme.LocalGlass
 import space.owork.draw.ui.theme.glassSurface
 import kotlin.math.roundToInt
@@ -163,6 +164,27 @@ fun SettingsScreen(
                                 onClick = { onUpdateSettings { it.copy(appTheme = t) } },
                             )
                         }
+                    }
+
+                    GlassDivider(Modifier.padding(vertical = 4.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+                            Text("Left-Handed Layout", color = p.text, fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "Moves the floating tool bar to the right edge so your palm stays clear.",
+                                color = p.secondary,
+                                fontSize = 12.5.sp,
+                            )
+                        }
+                        GlassToggle(
+                            checked = settings.leftHandedUi,
+                            onCheckedChange = { enabled -> onUpdateSettings { it.copy(leftHandedUi = enabled) } },
+                        )
                     }
                 }
 
@@ -303,6 +325,65 @@ fun SettingsScreen(
                                 modifier = Modifier.width(38.dp),
                             )
                         }
+                    }
+
+                    GlassDivider(Modifier.padding(vertical = 4.dp))
+
+                    Text("Stylus Side Button", color = p.text, fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold)
+                    Text(settings.stylusButtonAction.description, color = p.secondary, fontSize = 12.5.sp)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        StylusButtonAction.entries.forEach { action ->
+                            GlassChip(
+                                label = action.label,
+                                selected = settings.stylusButtonAction == action,
+                                onClick = { onUpdateSettings { it.copy(stylusButtonAction = action) } },
+                            )
+                        }
+                    }
+
+                    GlassDivider(Modifier.padding(vertical = 4.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+                            Text("Multi-Finger Tap Gestures", color = p.text, fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "2-finger tap to undo, 3-finger tap to redo, and 4-finger tap to toggle Zen mode.",
+                                color = p.secondary,
+                                fontSize = 12.5.sp,
+                            )
+                        }
+                        GlassToggle(
+                            checked = settings.multiFingerTapGestures,
+                            onCheckedChange = { enabled -> onUpdateSettings { it.copy(multiFingerTapGestures = enabled) } },
+                        )
+                    }
+
+                    GlassDivider(Modifier.padding(vertical = 4.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+                            Text("Long-Press Eyedropper", color = p.text, fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "Press and hold one finger on the canvas to sample a color with the loupe.",
+                                color = p.secondary,
+                                fontSize = 12.5.sp,
+                            )
+                        }
+                        GlassToggle(
+                            checked = settings.longPressEyedropper,
+                            onCheckedChange = { enabled -> onUpdateSettings { it.copy(longPressEyedropper = enabled) } },
+                        )
                     }
 
                     GlassDivider(Modifier.padding(vertical = 4.dp))

@@ -3,8 +3,10 @@ package space.owork.draw
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,13 +19,17 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import space.owork.draw.engine.AppTheme
 import space.owork.draw.engine.CanvasBackground
@@ -57,10 +63,32 @@ class MainActivity : ComponentActivity() {
                     state.appTheme == AppTheme.LIGHT
                 }
             }
-            LaunchedEffect(useDarkSystemIcons) {
+            val immersiveZen = state.zenMode && state.activeDocument != null && !state.showSettings
+            LaunchedEffect(useDarkSystemIcons, immersiveZen) {
                 val controller = WindowCompat.getInsetsController(window, window.decorView)
                 controller.isAppearanceLightStatusBars = useDarkSystemIcons
                 controller.isAppearanceLightNavigationBars = useDarkSystemIcons
+                controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                if (immersiveZen) {
+                    controller.hide(WindowInsetsCompat.Type.systemBars())
+                } else {
+                    controller.show(WindowInsetsCompat.Type.systemBars())
+                }
+            }
+
+            var pendingSvgTransparent by remember { mutableStateOf(false) }
+            val saveSvgLauncher = rememberLauncherForActivityResult(
+                contract = ActivityResultContracts.CreateDocument("image/svg+xml"),
+            ) { uri ->
+                if (uri != null) {
+                    viewModel.exportActiveDocumentSvgToUri(uri, pendingSvgTransparent)
+                }
+            }
+
+            LaunchedEffect(state.pendingShare) {
+                val payload = state.pendingShare ?: return@LaunchedEffect
+                ExportHelper.launchShareSheet(this@MainActivity, payload)
+                viewModel.consumePendingShare()
             }
 
             DrawspaceTheme(appTheme = state.appTheme) {
@@ -75,7 +103,10 @@ class MainActivity : ComponentActivity() {
                 BackHandler(enabled = state.showSettings) {
                     viewModel.closeSettings()
                 }
-                BackHandler(enabled = state.activeDocument != null && !state.showSettings) {
+                BackHandler(enabled = state.zenMode && !state.showSettings) {
+                    viewModel.exitZenMode()
+                }
+                BackHandler(enabled = state.activeDocument != null && !state.showSettings && !state.zenMode) {
                     viewModel.closeDocumentToWorkspace()
                 }
 
@@ -83,7 +114,9 @@ class MainActivity : ComponentActivity() {
                     snackbarHost = {
                         SnackbarHost(
                             hostState = snackbarHostState,
-                            modifier = Modifier.padding(bottom = if (state.activeDocument != null && !state.showSettings) 78.dp else 16.dp),
+                            modifier = Modifier.padding(
+                                bottom = if (state.activeDocument != null && !state.showSettings && !state.zenMode) 78.dp else 16.dp,
+                            ),
                         ) { data ->
                             val p = LocalGlass.current
                             GlassPill(shape = CircleShape) {
@@ -135,7 +168,15 @@ class MainActivity : ComponentActivity() {
                                     onSaveSnapshot = viewModel::saveNamedSnapshot,
                                     onRestoreCheckpoint = viewModel::restoreCheckpoint,
                                     onRequestCheckpointPreview = viewModel::loadCheckpointPreview,
-                                    onExportPng = viewModel::exportActiveDocumentPng,
+                                    onToggleZenMode = viewModel::toggleZenMode,
+                                    onExitZenMode = viewModel::exitZenMode,
+                                    onSavePngToPhotos = viewModel::saveActiveDocumentPngToPhotos,
+                                    onSharePng = viewModel::shareActiveDocumentPng,
+                                    onSaveSvg = { transparent ->
+                                        pendingSvgTransparent = transparent
+                                        saveSvgLauncher.launch(viewModel.suggestedSvgFilename())
+                                    },
+                                    onShareSvg = viewModel::shareActiveDocumentSvg,
                                 )
                             }
 

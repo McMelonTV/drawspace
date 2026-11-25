@@ -356,4 +356,76 @@ class EngineCoreTest {
         doc = restoredStack.redo(doc, nowMs = 9404L)!!.first
         assertEquals(parts.map { it.id }.toSet(), doc.visibleStrokes().map { it.id }.toSet())
     }
+
+    @Test
+    fun `svg generator omits paper rect when transparent background is requested`() {
+        var doc = Document.createNew("Transparent SVG", CanvasMode.Fixed(800, 600), nowMs = 9500L)
+        val stroke = Stroke(
+            id = Ulid.next(9501L),
+            brush = BrushSpec.defaultFor(ToolType.PEN, 0xFFD93848.toInt()),
+            points = listOf(StrokePoint(10f, 10f), StrokePoint(100f, 100f)),
+        )
+        doc = doc.updateStrokeLayer(doc.primaryStrokeLayer().id) { it.copy(strokes = listOf(stroke)) }
+
+        val opaqueSvg = DocumentPreviewGenerator.generateSvg(doc, AppTheme.LIGHT, transparentBackground = false).decodeToString()
+        val transparentSvg = DocumentPreviewGenerator.generateSvg(doc, AppTheme.LIGHT, transparentBackground = true).decodeToString()
+
+        assertTrue(opaqueSvg.contains("fill=\"#FAF8F5\""))
+        assertFalse(transparentSvg.contains("fill=\"#FAF8F5\""))
+        assertTrue(transparentSvg.contains("stroke=\"#D93848\""))
+    }
+
+    @Test
+    fun `color sampler composites paper, fills, and translucent strokes in render order`() {
+        var doc = Document.createNew("Sampler", CanvasMode.Infinite, nowMs = 9600L)
+        val layerId = doc.primaryStrokeLayer().id
+        val paper = doc.meta.background.resolvePaperArgb(AppTheme.LIGHT)
+
+        // Empty spot returns paper color
+        assertEquals(paper, ColorSampler.sampleColor(doc, 0f, 0f, AppTheme.LIGHT))
+
+        // Add opaque fill behind an opaque stroke and a 50% translucent stroke on top
+        val fill = Stroke(
+            id = Ulid.next(9601L),
+            brush = BrushSpec.defaultFor(ToolType.FILL, 0xFF0000FF.toInt()),
+            points = listOf(StrokePoint(0f, 0f), StrokePoint(100f, 100f)),
+            bounds = WorldRect(0f, 0f, 100f, 100f),
+        )
+        val redPen = Stroke(
+            id = Ulid.next(9602L),
+            brush = BrushSpec.defaultFor(ToolType.PEN, 0xFFFF0000.toInt()).copy(sizeWorldPx = 20f, opacity = 1f),
+            points = listOf(StrokePoint(10f, 50f), StrokePoint(90f, 50f)),
+        )
+        val halfWhite = Stroke(
+            id = Ulid.next(9603L),
+            brush = BrushSpec.defaultFor(ToolType.MARKER, 0xFFFFFFFF.toInt()).copy(sizeWorldPx = 20f, opacity = 0.5f),
+            points = listOf(StrokePoint(50f, 10f), StrokePoint(50f, 90f)),
+        )
+        doc = doc.updateStrokeLayer(layerId) { it.copy(strokes = listOf(fill, redPen, halfWhite)) }
+
+        // Inside fill only -> blue
+        assertEquals(0xFF0000FF.toInt(), ColorSampler.sampleColor(doc, 10f, 10f, AppTheme.LIGHT))
+        // On red stroke over blue fill -> red
+        assertEquals(0xFFFF0000.toInt(), ColorSampler.sampleColor(doc, 20f, 50f, AppTheme.LIGHT))
+        // Intersection of red stroke + 50% white marker -> pink (~#FF8080)
+        val blended = ColorSampler.sampleColor(doc, 50f, 50f, AppTheme.LIGHT)
+        val r = (blended ushr 16) and 0xFF
+        val g = (blended ushr 8) and 0xFF
+        val b = blended and 0xFF
+        assertEquals(255, r)
+        assertTrue("Expected ~128 green, got $g", g in 126..130)
+        assertTrue("Expected ~128 blue, got $b", b in 126..130)
+    }
+
+    @Test
+    fun `legacy app settings json decodes with defaults for new v02 fields`() {
+        val legacyJson = """{"appTheme":"black","stylusOnlyDefault":true}"""
+        val decoded = DocumentCodec.compactJson.decodeFromString<AppSettings>(legacyJson)
+        assertEquals(AppTheme.BLACK, decoded.appTheme)
+        assertTrue(decoded.stylusOnlyDefault)
+        assertEquals(StylusButtonAction.ERASER, decoded.stylusButtonAction)
+        assertTrue(decoded.multiFingerTapGestures)
+        assertTrue(decoded.longPressEyedropper)
+        assertFalse(decoded.leftHandedUi)
+    }
 }

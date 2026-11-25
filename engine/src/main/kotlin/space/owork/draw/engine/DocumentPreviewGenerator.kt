@@ -18,6 +18,7 @@ object DocumentPreviewGenerator {
         document: Document,
         theme: AppTheme = AppTheme.LIGHT,
         maxDimensionPx: Int = 1200,
+        transparentBackground: Boolean = false,
     ): ByteArray {
         val bounds = resolvePreviewBounds(document)
         val width = bounds.width.coerceAtLeast(1f)
@@ -31,9 +32,11 @@ object DocumentPreviewGenerator {
         sb.append(
             """<svg xmlns="http://www.w3.org/2000/svg" viewBox="${fmt(bounds.left)} ${fmt(bounds.top)} ${fmt(width)} ${fmt(height)}" width="$outW" height="$outH">""",
         ).append('\n')
-        sb.append(
-            """  <rect x="${fmt(bounds.left)}" y="${fmt(bounds.top)}" width="${fmt(width)}" height="${fmt(height)}" fill="${argbToHex(paperArgb)}"/>""",
-        ).append('\n')
+        if (!transparentBackground) {
+            sb.append(
+                """  <rect x="${fmt(bounds.left)}" y="${fmt(bounds.top)}" width="${fmt(width)}" height="${fmt(height)}" fill="${argbToHex(paperArgb)}"/>""",
+            ).append('\n')
+        }
 
         val fixedBounds = document.meta.canvasMode.bounds
         if (fixedBounds != null) {
