@@ -113,6 +113,7 @@ class MainActivity : ComponentActivity() {
                                     onOpenSettings = viewModel::openSettings,
                                     onRename = viewModel::renameActiveDocument,
                                     onSelectTool = viewModel::selectTool,
+                                    onSelectEraserMode = viewModel::setEraserMode,
                                     onSelectColor = viewModel::selectColor,
                                     onAddSwatch = viewModel::addColorToPalette,
                                     onRemoveSwatch = viewModel::removeSwatchAt,

@@ -61,6 +61,55 @@ data class Stroke(
         return false
     }
 
+    /**
+     * Checks whether a world-space swept eraser capsule from `(ax, ay)` to `(bx, by)`
+     * with radius [eraserRadius] intersects this stroke.
+     */
+    fun hitTestCapsule(
+        ax: Float,
+        ay: Float,
+        bx: Float,
+        by: Float,
+        eraserRadius: Float,
+    ): Boolean {
+        if (ax == bx && ay == by) return hitTest(ax, ay, eraserRadius)
+        val capsuleBounds = WorldRect(
+            left = min(ax, bx) - eraserRadius,
+            top = min(ay, by) - eraserRadius,
+            right = max(ax, bx) + eraserRadius,
+            bottom = max(ay, by) + eraserRadius,
+        )
+        if (!bounds.intersects(capsuleBounds)) return false
+
+        if (brush.tool == ToolType.FILL) {
+            var i = 0
+            while (i + 1 < points.size) {
+                val tl = points[i]
+                val br = points[i + 1]
+                if (distanceRectToSegment(tl.x, tl.y, br.x, br.y, ax, ay, bx, by) <= eraserRadius) {
+                    return true
+                }
+                i += 2
+            }
+            return false
+        }
+
+        val hitRadius = eraserRadius + brush.sizeWorldPx * 0.6f
+        if (points.isEmpty()) return false
+        if (points.size == 1) {
+            val p = points[0]
+            return distancePointToSegment(p.x, p.y, ax, ay, bx, by) <= hitRadius
+        }
+        for (i in 0 until points.lastIndex) {
+            val p0 = points[i]
+            val p1 = points[i + 1]
+            if (distanceSegmentToSegment(p0.x, p0.y, p1.x, p1.y, ax, ay, bx, by) <= hitRadius) {
+                return true
+            }
+        }
+        return false
+    }
+
     companion object {
         fun computeBounds(points: List<StrokePoint>, brushSizeWorldPx: Float): WorldRect {
             if (points.isEmpty()) return WorldRect(0f, 0f, 0f, 0f)

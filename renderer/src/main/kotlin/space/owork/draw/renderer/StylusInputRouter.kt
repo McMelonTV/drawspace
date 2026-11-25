@@ -14,6 +14,7 @@ import space.owork.draw.engine.StrokeSmoothingLevel
 import space.owork.draw.engine.ToolType
 import space.owork.draw.engine.Ulid
 import space.owork.draw.engine.ViewportCamera
+import space.owork.draw.engine.WorldPoint
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -55,7 +56,7 @@ internal class StylusInputRouter(
         fun onActiveStrokeUpdated(brush: BrushSpec, points: List<StrokePoint>, predictedPoints: List<StrokePoint>)
         fun onActiveStrokeCommitted(stroke: Stroke)
         fun onActiveStrokeCanceled()
-        fun onEraseSample(worldX: Float, worldY: Float, eraserRadiusWorld: Float)
+        fun onEraseSamples(points: List<WorldPoint>, eraserRadiusWorld: Float)
         fun onEraseFinished()
         fun onBucketFillTap(worldX: Float, worldY: Float, brush: BrushSpec)
         fun onCameraGesture(newCamera: ViewportCamera)
@@ -68,6 +69,8 @@ internal class StylusInputRouter(
     private var activeBrush: BrushSpec? = null
     private val activePoints = ArrayList<StrokePoint>(128)
     private var isErasing = false
+    private var lastErasePoint: WorldPoint? = null
+    private val erasePathBuffer = ArrayList<WorldPoint>(16)
 
     // Pressure eraser tracking: TIMING (pen landed, waiting out the hold) -> ARMED (hold elapsed,
     // waiting for a firm press) -> engaged (isErasing). Moving off the landing spot while TIMING aborts.
@@ -154,17 +157,11 @@ internal class StylusInputRouter(
                         maybeEngagePressureEraser()
                     }
                 }
-                if (!isErasing) {
-                    predictor.recordMotionEvent(event)
-                }
-                val rawLast = appendHistoricalAndCurrent(event, idx, recordForPrediction = !isErasing)
                 if (isErasing) {
-                    val last = activePoints.lastOrNull()
-                    if (last != null) {
-                        val radius = (activeBrush?.sizeWorldPx ?: 24f) * 0.55f / callbacks.currentCamera().zoom.coerceAtLeast(0.25f)
-                        callbacks.onEraseSample(last.x, last.y, radius)
-                    }
+                    emitEraseMove(event, idx)
                 } else {
+                    predictor.recordMotionEvent(event)
+                    val rawLast = appendHistoricalAndCurrent(event, idx, recordForPrediction = true)
                     if (brush == null) return true
                     val predicted = predictor.predictTail(
                         event = event,
@@ -232,7 +229,7 @@ internal class StylusInputRouter(
         activeBrush = effectiveBrush
         isErasing = effectiveBrush.tool == ToolType.ERASER
 
-        if (effectiveBrush.tool != ToolType.FILL) {
+        if (effectiveBrush.tool != ToolType.FILL && !isErasing) {
             // Deliver unbatched digitizer samples straight to front-buffered ink for lower latency and steadier prediction.
             hostView.requestUnbufferedDispatch(event)
         }
@@ -249,7 +246,11 @@ internal class StylusInputRouter(
         }
         if (isErasing) {
             val radius = effectiveBrush.sizeWorldPx * 0.55f / callbacks.currentCamera().zoom.coerceAtLeast(0.25f)
-            callbacks.onEraseSample(sample.x, sample.y, radius)
+            val pt = WorldPoint(sample.x, sample.y)
+            lastErasePoint = pt
+            erasePathBuffer.clear()
+            erasePathBuffer.add(pt)
+            callbacks.onEraseSamples(erasePathBuffer, radius)
         } else {
             if (effectiveBrush.tool != ToolType.LINE) {
                 predictor.recordMotionEvent(event)
@@ -281,8 +282,29 @@ internal class StylusInputRouter(
         if (anchor != null) {
             activePoints.add(anchor)
             val radius = eraser.sizeWorldPx * 0.55f / callbacks.currentCamera().zoom.coerceAtLeast(0.25f)
-            callbacks.onEraseSample(anchor.x, anchor.y, radius)
+            val pt = WorldPoint(anchor.x, anchor.y)
+            lastErasePoint = pt
+            erasePathBuffer.clear()
+            erasePathBuffer.add(pt)
+            callbacks.onEraseSamples(erasePathBuffer, radius)
         }
+    }
+
+    private fun emitEraseMove(event: MotionEvent, pointerIndex: Int) {
+        val camera = callbacks.currentCamera()
+        erasePathBuffer.clear()
+        lastErasePoint?.let { erasePathBuffer.add(it) }
+        val historyCount = event.historySize
+        for (h in 0 until historyCount) {
+            erasePathBuffer.add(
+                camera.screenToWorld(event.getHistoricalX(pointerIndex, h), event.getHistoricalY(pointerIndex, h)),
+            )
+        }
+        val curr = camera.screenToWorld(event.getX(pointerIndex), event.getY(pointerIndex))
+        erasePathBuffer.add(curr)
+        lastErasePoint = curr
+        val radius = (activeBrush?.sizeWorldPx ?: 24f) * 0.55f / camera.zoom.coerceAtLeast(0.25f)
+        callbacks.onEraseSamples(erasePathBuffer, radius)
     }
 
     private fun disarmPressureEraser() {
@@ -308,13 +330,12 @@ internal class StylusInputRouter(
             resetActiveStroke()
             return
         }
-        if (!isErasing) {
-            predictor.recordMotionEvent(event)
-        }
-        appendHistoricalAndCurrent(event, pointerIndex, recordForPrediction = false)
         if (isErasing) {
+            emitEraseMove(event, pointerIndex)
             callbacks.onEraseFinished()
         } else {
+            predictor.recordMotionEvent(event)
+            appendHistoricalAndCurrent(event, pointerIndex, recordForPrediction = false)
             if (brush != null && activePoints.isNotEmpty()) {
                 val refined = StrokeSmoother.refine(
                     rawPoints = activePoints,
@@ -368,6 +389,8 @@ internal class StylusInputRouter(
         activeBrush = null
         activePoints.clear()
         isErasing = false
+        lastErasePoint = null
+        erasePathBuffer.clear()
     }
 
     private fun handleMultiTouchNavigation(event: MotionEvent) {
