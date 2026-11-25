@@ -14,12 +14,14 @@ import space.owork.draw.engine.AppTheme
 import space.owork.draw.engine.BrushSpec
 import space.owork.draw.engine.CameraLocks
 import space.owork.draw.engine.CanvasBackground
+import space.owork.draw.engine.ColorSampler
 import space.owork.draw.engine.Document
 import space.owork.draw.engine.EraserMode
 import space.owork.draw.engine.PartialEraser
 import space.owork.draw.engine.Stroke
 import space.owork.draw.engine.StrokePoint
 import space.owork.draw.engine.StrokeSmoothingLevel
+import space.owork.draw.engine.StylusButtonAction
 import space.owork.draw.engine.ViewportCamera
 import space.owork.draw.engine.WorldPoint
 import space.owork.draw.engine.WorldRect
@@ -42,6 +44,12 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
         fun onStrokesErased(removedStrokeIds: List<String>, replacementStrokes: List<Stroke>)
         fun onBucketFillRequested(worldX: Float, worldY: Float, brush: BrushSpec, visibleWorldBounds: WorldRect?)
         fun onCameraChanged(camera: ViewportCamera)
+        fun onTwoFingerTapUndo() {}
+        fun onThreeFingerTapRedo() {}
+        fun onFourFingerTapZen() {}
+        fun onStylusButtonUndo() {}
+        fun onEyedropperUpdate(screenX: Float, screenY: Float, colorArgb: Int) {}
+        fun onEyedropperFinished(commit: Boolean) {}
     }
 
     private val documentRef = AtomicReference<Document?>(null)
@@ -53,6 +61,7 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
     private val brushRef = AtomicReference(BrushSpec.defaultFor(space.owork.draw.engine.ToolType.PEN))
     private val eraserBrushRef = AtomicReference(BrushSpec.defaultFor(space.owork.draw.engine.ToolType.ERASER))
     private val eraserModeRef = AtomicReference(EraserMode.STROKE)
+    private val stylusButtonActionRef = AtomicReference(StylusButtonAction.ERASER)
     private val themeRef = AtomicReference(AppTheme.DARK)
     private val aaModeRef = AtomicReference(AntiAliasingMode.HIGH)
     private val smoothingRef = AtomicReference(StrokeSmoothingLevel.LOW)
@@ -62,6 +71,10 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
     private var pressureEraserEnabled = true
     @Volatile
     private var pressureEraserThresholdValue = AppSettings.DEFAULT_PRESSURE_ERASER_THRESHOLD
+    @Volatile
+    private var multiFingerTapGesturesEnabled = true
+    @Volatile
+    private var longPressEyedropperEnabled = true
     @Volatile
     private var snapLineAnglesEnabled = false
     @Volatile
@@ -81,7 +94,7 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
 
     private val glEngine = DrawspaceGlEngine()
     private val liveMesh = IncrementalLiveMesh()
-    private val eraserCursorRef = AtomicReference<EraserCursor?>(null)
+    private val eraserCursorRef = AtomicReference<CanvasCursor?>(null)
     private val multiBufferRenderPending = AtomicBoolean(false)
     private val density = resources.displayMetrics.density
     private var frontBufferedRenderer: GLFrontBufferedRenderer<Unit>? = null
@@ -167,6 +180,9 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
             override fun roundTurnsAndEnds(): Boolean = roundTurnsAndEndsEnabled
             override fun pressureEraser(): Boolean = pressureEraserEnabled
             override fun pressureEraserThreshold(): Float = pressureEraserThresholdValue
+            override fun stylusButtonAction(): StylusButtonAction = stylusButtonActionRef.get()
+            override fun multiFingerTapGestures(): Boolean = multiFingerTapGesturesEnabled
+            override fun longPressEyedropper(): Boolean = longPressEyedropperEnabled
             override fun snapLineAngles(): Boolean = snapLineAnglesEnabled
             override fun snapLineToGrid(): Boolean = snapLineToGridEnabled
             override fun currentBackground(): CanvasBackground = documentRef.get()?.meta?.background ?: CanvasBackground()
@@ -203,7 +219,7 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
             override fun onEraseSamples(points: List<WorldPoint>, eraserRadiusWorld: Float) {
                 if (points.isEmpty()) return
                 val tip = points.last()
-                eraserCursorRef.set(EraserCursor(tip.x, tip.y, eraserRadiusWorld))
+                eraserCursorRef.set(CanvasCursor(tip.x, tip.y, eraserRadiusWorld))
 
                 val doc = documentRef.get() ?: return
                 val mode = gestureEraserMode ?: eraserModeRef.get().also { gestureEraserMode = it }
@@ -336,6 +352,39 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
                 listener?.onCameraChanged(newCamera)
                 requestFullRedraw()
             }
+
+            override fun onTwoFingerTapUndo() {
+                listener?.onTwoFingerTapUndo()
+            }
+
+            override fun onThreeFingerTapRedo() {
+                listener?.onThreeFingerTapRedo()
+            }
+
+            override fun onFourFingerTapZen() {
+                listener?.onFourFingerTapZen()
+            }
+
+            override fun onStylusButtonUndo() {
+                listener?.onStylusButtonUndo()
+            }
+
+            override fun onEyedropperSample(screenX: Float, screenY: Float, worldX: Float, worldY: Float) {
+                val doc = documentRef.get() ?: return
+                val zoom = cameraRef.get().zoom.coerceAtLeast(0.25f)
+                val color = ColorSampler.sampleColor(
+                    document = doc,
+                    worldX = worldX,
+                    worldY = worldY,
+                    appTheme = themeRef.get(),
+                    extraRadiusWorld = 3.5f / zoom,
+                )
+                listener?.onEyedropperUpdate(screenX, screenY, color)
+            }
+
+            override fun onEyedropperFinished(commit: Boolean) {
+                listener?.onEyedropperFinished(commit)
+            }
         },
     )
 
@@ -412,6 +461,18 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
     fun setPressureEraser(enabled: Boolean, threshold: Float) {
         pressureEraserEnabled = enabled
         pressureEraserThresholdValue = threshold
+    }
+
+    fun setStylusButtonAction(action: StylusButtonAction) {
+        stylusButtonActionRef.set(action)
+    }
+
+    fun setMultiFingerTapGestures(enabled: Boolean) {
+        multiFingerTapGesturesEnabled = enabled
+    }
+
+    fun setLongPressEyedropper(enabled: Boolean) {
+        longPressEyedropperEnabled = enabled
     }
 
     fun setSnapLineAngles(enabled: Boolean) {
@@ -501,6 +562,9 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean = inputRouter.onTouchEvent(event)
 
+    override fun onHoverEvent(event: MotionEvent): Boolean =
+        inputRouter.onHoverEvent(event) || super.onHoverEvent(event)
+
     private fun fitDocumentToViewport(doc: Document) {
         hasInitializedCameraForDocId = doc.id
         val bounds = doc.contentBounds()
@@ -514,4 +578,4 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
     }
 }
 
-private class EraserCursor(val worldX: Float, val worldY: Float, val radiusWorld: Float)
+private class CanvasCursor(val worldX: Float, val worldY: Float, val radiusWorld: Float)

@@ -12,6 +12,7 @@ import space.owork.draw.engine.ToolType
 import space.owork.draw.engine.WorldRect
 import java.io.File
 import java.io.FileOutputStream
+import java.io.OutputStream
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -24,8 +25,29 @@ object DocumentPngExporter {
         document: Document,
         outputFile: File,
         theme: AppTheme = AppTheme.LIGHT,
+        transparentBackground: Boolean = false,
         maxInfiniteDimensionPx: Int = 2560,
     ): File {
+        outputFile.parentFile?.mkdirs()
+        FileOutputStream(outputFile).use { fos ->
+            exportPngToStream(
+                document = document,
+                outputStream = fos,
+                theme = theme,
+                transparentBackground = transparentBackground,
+                maxInfiniteDimensionPx = maxInfiniteDimensionPx,
+            )
+        }
+        return outputFile
+    }
+
+    fun exportPngToStream(
+        document: Document,
+        outputStream: OutputStream,
+        theme: AppTheme = AppTheme.LIGHT,
+        transparentBackground: Boolean = false,
+        maxInfiniteDimensionPx: Int = 2560,
+    ) {
         val fixedBounds = document.meta.canvasMode.bounds
         val exportBounds: WorldRect
         val outWidth: Int
@@ -49,7 +71,9 @@ object DocumentPngExporter {
         val bitmap = Bitmap.createBitmap(outWidth, outHeight, Bitmap.Config.ARGB_8888)
         try {
             val canvas = Canvas(bitmap)
-            canvas.drawColor(document.meta.background.resolvePaperArgb(theme))
+            if (!transparentBackground) {
+                canvas.drawColor(document.meta.background.resolvePaperArgb(theme))
+            }
             canvas.scale(scale, scale)
             canvas.translate(-exportBounds.left, -exportBounds.top)
 
@@ -70,12 +94,8 @@ object DocumentPngExporter {
                 }
             }
 
-            outputFile.parentFile?.mkdirs()
-            FileOutputStream(outputFile).use { fos ->
-                bitmap.compress(Bitmap.CompressFormat.PNG, 100, fos)
-                fos.flush()
-            }
-            return outputFile
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, outputStream)
+            outputStream.flush()
         } finally {
             bitmap.recycle()
         }

@@ -32,8 +32,10 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.ScreenRotationAlt
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -67,12 +69,13 @@ import kotlin.math.roundToInt
 private enum class DocumentModalTab(val label: String) {
     ACTIONS("Actions"),
     CANVAS("Canvas"),
+    EXPORT("Export"),
 }
 
 /**
  * tvOS QuickActions-inspired two-column document modal:
  * Left: lifted live sketch thumbnail + tap-to-rename title & metadata.
- * Right: frosted glass panel with concentric Actions / Canvas tabs and clean borderless rows.
+ * Right: frosted glass panel with concentric Actions / Canvas / Export tabs and clean borderless rows.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -87,7 +90,10 @@ fun DocumentMenuModal(
     onResetRotation: () -> Unit,
     onOpenHistory: () -> Unit,
     onSaveSnapshot: (String) -> Unit,
-    onExportPng: () -> Unit,
+    onSavePngToPhotos: (transparentBackground: Boolean) -> Unit,
+    onSharePng: (transparentBackground: Boolean) -> Unit,
+    onSaveSvg: (transparentBackground: Boolean) -> Unit,
+    onShareSvg: (transparentBackground: Boolean) -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     val p = LocalGlass.current
@@ -98,6 +104,7 @@ fun DocumentMenuModal(
     }
     var showingSnapshotInput by remember { mutableStateOf(false) }
     var snapshotDraft by remember { mutableStateOf("") }
+    var exportTransparent by remember { mutableStateOf(false) }
 
     val summary = remember(doc) {
         val visible = doc.visibleStrokes()
@@ -301,13 +308,10 @@ fun DocumentMenuModal(
                                 },
                             )
                             GlassMenuRow(
-                                title = "Export PNG",
-                                detail = if (doc.canvasMode is CanvasMode.Fixed) "Full res" else "Fitted",
-                                icon = Icons.Outlined.Download,
-                                onClick = {
-                                    onDismiss()
-                                    onExportPng()
-                                },
+                                title = "Export & Share",
+                                detail = "PNG · SVG",
+                                icon = Icons.Outlined.Share,
+                                onClick = { activeTab = DocumentModalTab.EXPORT },
                             )
 
                             GlassDivider(Modifier.padding(vertical = 4.dp))
@@ -503,6 +507,81 @@ fun DocumentMenuModal(
                                         )
                                     }
                                 }
+                            }
+                        }
+
+                        DocumentModalTab.EXPORT -> {
+                            val bgDetail = if (exportTransparent) "Transparent" else "With paper"
+                            val pngSizeDetail = if (doc.canvasMode is CanvasMode.Fixed) "Full res" else "Up to 2560px"
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                                        Text("Transparent background", color = p.text, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                        Text(
+                                            "Omit paper background in exported PNG & SVG.",
+                                            color = p.secondary,
+                                            fontSize = 11.5.sp,
+                                        )
+                                    }
+                                    GlassToggle(
+                                        checked = exportTransparent,
+                                        onCheckedChange = { exportTransparent = it },
+                                    )
+                                }
+
+                                GlassDivider(Modifier.padding(vertical = 2.dp))
+                                GlassSectionLabel("PNG Image · $pngSizeDetail")
+
+                                GlassMenuRow(
+                                    title = "Save PNG to Photos",
+                                    detail = "Pictures/Drawspace",
+                                    icon = Icons.Outlined.PhotoLibrary,
+                                    onClick = {
+                                        val transparent = exportTransparent
+                                        onDismiss()
+                                        onSavePngToPhotos(transparent)
+                                    },
+                                )
+                                GlassMenuRow(
+                                    title = "Share PNG",
+                                    detail = bgDetail,
+                                    icon = Icons.Outlined.Share,
+                                    onClick = {
+                                        val transparent = exportTransparent
+                                        onDismiss()
+                                        onSharePng(transparent)
+                                    },
+                                )
+
+                                GlassDivider(Modifier.padding(vertical = 2.dp))
+                                GlassSectionLabel("SVG Vector")
+
+                                GlassMenuRow(
+                                    title = "Save SVG…",
+                                    detail = bgDetail,
+                                    icon = Icons.Outlined.Download,
+                                    onClick = {
+                                        val transparent = exportTransparent
+                                        onDismiss()
+                                        onSaveSvg(transparent)
+                                    },
+                                )
+                                GlassMenuRow(
+                                    title = "Share SVG",
+                                    detail = bgDetail,
+                                    icon = Icons.Outlined.Share,
+                                    onClick = {
+                                        val transparent = exportTransparent
+                                        onDismiss()
+                                        onShareSvg(transparent)
+                                    },
+                                )
                             }
                         }
                     }

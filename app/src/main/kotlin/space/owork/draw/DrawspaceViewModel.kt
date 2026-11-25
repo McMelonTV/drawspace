@@ -2,6 +2,7 @@ package space.owork.draw
 
 import android.app.Application
 import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -65,7 +66,9 @@ data class AppUiState(
     val cameraRotationRad: Float = 0f,
     val history: List<CheckpointInfo> = emptyList(),
     val historyPreviews: Map<String, DocumentSummary> = emptyMap(),
+    val zenMode: Boolean = false,
     val saveStatus: String = "Saved",
+    val pendingShare: SharePayload? = null,
     val snackbarMessage: String? = null,
 ) {
     val appTheme: AppTheme get() = settings.appTheme
@@ -250,6 +253,7 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
             state.copy(
                 activeDocument = null,
                 documents = updatedDocs,
+                zenMode = false,
                 canUndo = false,
                 canRedo = false,
                 history = emptyList(),
@@ -590,16 +594,108 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun exportActiveDocumentPng() {
+    fun toggleZenMode() {
+        _uiState.update { it.copy(zenMode = !it.zenMode) }
+    }
+
+    fun exitZenMode() {
+        _uiState.update { if (it.zenMode) it.copy(zenMode = false) else it }
+    }
+
+    fun suggestedSvgFilename(): String {
+        val doc = _uiState.value.activeDocument ?: return "drawspace_sketch.svg"
+        return "${ExportHelper.safeFileStem(doc)}.svg"
+    }
+
+    fun saveActiveDocumentPngToPhotos(transparentBackground: Boolean) {
         viewModelScope.launch {
             val doc = _uiState.value.activeDocument ?: return@launch
-            val safeTitle = doc.title.replace(Regex("[^a-zA-Z0-9._-]+"), "_").trim('_').ifEmpty { doc.id }
-            val outFile = File(exportDir, "${safeTitle}_${System.currentTimeMillis()}.png")
-            val exported = withContext(Dispatchers.IO) {
-                DocumentPngExporter.exportPng(doc, outFile, theme = _uiState.value.appTheme)
+            val theme = _uiState.value.appTheme
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    ExportHelper.savePngToPhotos(
+                        context = getApplication(),
+                        document = doc,
+                        theme = theme,
+                        transparentBackground = transparentBackground,
+                    )
+                }
+            }.onSuccess { name ->
+                _uiState.update { it.copy(snackbarMessage = "Saved to Pictures/Drawspace/$name") }
+            }.onFailure { err ->
+                _uiState.update { it.copy(snackbarMessage = "PNG save failed: ${err.message ?: "unknown error"}") }
             }
-            _uiState.update { it.copy(snackbarMessage = "Exported PNG: ${exported.name}") }
         }
+    }
+
+    fun shareActiveDocumentPng(transparentBackground: Boolean) {
+        viewModelScope.launch {
+            val doc = _uiState.value.activeDocument ?: return@launch
+            val theme = _uiState.value.appTheme
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    ExportHelper.prepareSharePng(
+                        context = getApplication(),
+                        exportDir = exportDir,
+                        document = doc,
+                        theme = theme,
+                        transparentBackground = transparentBackground,
+                    )
+                }
+            }.onSuccess { payload ->
+                _uiState.update { it.copy(pendingShare = payload) }
+            }.onFailure { err ->
+                _uiState.update { it.copy(snackbarMessage = "PNG share failed: ${err.message ?: "unknown error"}") }
+            }
+        }
+    }
+
+    fun shareActiveDocumentSvg(transparentBackground: Boolean) {
+        viewModelScope.launch {
+            val doc = _uiState.value.activeDocument ?: return@launch
+            val theme = _uiState.value.appTheme
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    ExportHelper.prepareShareSvg(
+                        context = getApplication(),
+                        exportDir = exportDir,
+                        document = doc,
+                        theme = theme,
+                        transparentBackground = transparentBackground,
+                    )
+                }
+            }.onSuccess { payload ->
+                _uiState.update { it.copy(pendingShare = payload) }
+            }.onFailure { err ->
+                _uiState.update { it.copy(snackbarMessage = "SVG share failed: ${err.message ?: "unknown error"}") }
+            }
+        }
+    }
+
+    fun exportActiveDocumentSvgToUri(uri: Uri, transparentBackground: Boolean) {
+        viewModelScope.launch {
+            val doc = _uiState.value.activeDocument ?: return@launch
+            val theme = _uiState.value.appTheme
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    ExportHelper.writeSvgToUri(
+                        context = getApplication(),
+                        uri = uri,
+                        document = doc,
+                        theme = theme,
+                        transparentBackground = transparentBackground,
+                    )
+                }
+            }.onSuccess {
+                _uiState.update { it.copy(snackbarMessage = "Saved SVG vector") }
+            }.onFailure { err ->
+                _uiState.update { it.copy(snackbarMessage = "SVG save failed: ${err.message ?: "unknown error"}") }
+            }
+        }
+    }
+
+    fun consumePendingShare() {
+        _uiState.update { it.copy(pendingShare = null) }
     }
 
     fun onAppBackgrounded() {
@@ -625,6 +721,7 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
         _uiState.update { state ->
             state.copy(
                 activeDocument = doc,
+                zenMode = false,
                 allowFingerDrawing = !state.settings.stylusOnlyDefault,
                 hidePatternTemporarily = false,
                 lockMode = state.settings.defaultLockMode,

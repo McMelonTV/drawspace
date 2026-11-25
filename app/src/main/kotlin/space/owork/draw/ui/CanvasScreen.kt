@@ -1,16 +1,23 @@
 package space.owork.draw.ui
 
+import android.view.HapticFeedbackConstants
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
@@ -30,6 +37,8 @@ import androidx.compose.material.icons.outlined.ColorLens
 import androidx.compose.material.icons.outlined.Draw
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.Fullscreen
+import androidx.compose.material.icons.outlined.FullscreenExit
 import androidx.compose.material.icons.outlined.GridOff
 import androidx.compose.material.icons.outlined.GridOn
 import androidx.compose.material.icons.outlined.History
@@ -43,13 +52,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke as DrawStroke
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -71,6 +88,13 @@ import space.owork.draw.ui.theme.LocalGlass
 import space.owork.draw.ui.theme.glassSurface
 import kotlin.math.abs
 import kotlin.math.roundToInt
+
+private data class EyedropperState(
+    val screenX: Float,
+    val screenY: Float,
+    val sampledArgb: Int,
+    val previousArgb: Int,
+)
 
 @Composable
 fun CanvasScreen(
@@ -101,14 +125,27 @@ fun CanvasScreen(
     onSaveSnapshot: (String) -> Unit,
     onRestoreCheckpoint: (CheckpointInfo) -> Unit,
     onRequestCheckpointPreview: (String) -> Unit,
-    onExportPng: () -> Unit,
+    onToggleZenMode: () -> Unit,
+    onExitZenMode: () -> Unit,
+    onSavePngToPhotos: (Boolean) -> Unit,
+    onSharePng: (Boolean) -> Unit,
+    onSaveSvg: (Boolean) -> Unit,
+    onShareSvg: (Boolean) -> Unit,
 ) {
     val doc = state.activeDocument ?: return
     val p = LocalGlass.current
+    val leftHanded = state.settings.leftHandedUi
     var surfaceRef by remember { mutableStateOf<DrawspaceSurfaceView?>(null) }
     var showDocumentModal by remember { mutableStateOf(false) }
     var showHistoryModal by remember { mutableStateOf(false) }
     var showColorPickerModal by remember { mutableStateOf(false) }
+    var eyedropper by remember { mutableStateOf<EyedropperState?>(null) }
+
+    val latestActiveColor by rememberUpdatedState(state.activeColorArgb)
+    val latestOnUndo by rememberUpdatedState(onUndo)
+    val latestOnRedo by rememberUpdatedState(onRedo)
+    val latestOnToggleZen by rememberUpdatedState(onToggleZenMode)
+    val latestOnSelectColor by rememberUpdatedState(onSelectColor)
 
     Box(modifier = Modifier.fillMaxSize()) {
         // Full-screen low-latency GLES 3.0 stylus surface
@@ -132,6 +169,48 @@ fun CanvasScreen(
                             ) = onBucketFillRequested(worldX, worldY, brush, visibleWorldBounds)
 
                             override fun onCameraChanged(camera: ViewportCamera) = onCameraChanged(camera)
+
+                            override fun onTwoFingerTapUndo() {
+                                performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                latestOnUndo()
+                            }
+
+                            override fun onThreeFingerTapRedo() {
+                                performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                latestOnRedo()
+                            }
+
+                            override fun onFourFingerTapZen() {
+                                performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                latestOnToggleZen()
+                            }
+
+                            override fun onStylusButtonUndo() {
+                                performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                latestOnUndo()
+                            }
+
+                            override fun onEyedropperUpdate(screenX: Float, screenY: Float, colorArgb: Int) {
+                                val prev = eyedropper
+                                if (prev == null) {
+                                    performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                }
+                                eyedropper = EyedropperState(
+                                    screenX = screenX,
+                                    screenY = screenY,
+                                    sampledArgb = colorArgb,
+                                    previousArgb = prev?.previousArgb ?: latestActiveColor,
+                                )
+                            }
+
+                            override fun onEyedropperFinished(commit: Boolean) {
+                                val sampled = eyedropper?.sampledArgb
+                                eyedropper = null
+                                if (commit && sampled != null) {
+                                    performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                    latestOnSelectColor(sampled)
+                                }
+                            }
                         },
                     )
                     setAppTheme(state.appTheme)
@@ -139,6 +218,9 @@ fun CanvasScreen(
                     setStrokeSmoothing(state.settings.strokeSmoothing)
                     setRoundTurnsAndEnds(state.settings.roundTurnsAndEnds)
                     setPressureEraser(state.settings.pressureEraser, state.settings.pressureEraserThreshold)
+                    setStylusButtonAction(state.settings.stylusButtonAction)
+                    setMultiFingerTapGestures(state.settings.multiFingerTapGestures)
+                    setLongPressEyedropper(state.settings.longPressEyedropper)
                     setSnapLineAngles(state.snapLineAngles)
                     setSnapLineToGrid(state.snapLineToGrid)
                     setHidePattern(state.hidePatternTemporarily)
@@ -156,6 +238,9 @@ fun CanvasScreen(
                 view.setStrokeSmoothing(state.settings.strokeSmoothing)
                 view.setRoundTurnsAndEnds(state.settings.roundTurnsAndEnds)
                 view.setPressureEraser(state.settings.pressureEraser, state.settings.pressureEraserThreshold)
+                view.setStylusButtonAction(state.settings.stylusButtonAction)
+                view.setMultiFingerTapGestures(state.settings.multiFingerTapGestures)
+                view.setLongPressEyedropper(state.settings.longPressEyedropper)
                 view.setSnapLineAngles(state.snapLineAngles)
                 view.setSnapLineToGrid(state.snapLineToGrid)
                 view.setHidePattern(state.hidePatternTemporarily)
@@ -169,15 +254,21 @@ fun CanvasScreen(
         )
 
         // Top floating glass capsules
-        Row(
+        AnimatedVisibility(
+            visible = !state.zenMode,
+            enter = fadeIn(),
+            exit = fadeOut(),
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .safeDrawingPadding()
                 .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
         ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
             // Top-left: Back + Document/Canvas modal trigger
             GlassPill(shape = CircleShape) {
                 Row(
@@ -314,17 +405,30 @@ fun CanvasScreen(
                         size = 36.dp,
                         onClick = { showHistoryModal = true },
                     )
+                    GlassIconButton(
+                        icon = Icons.Outlined.Fullscreen,
+                        contentDescription = "Hide UI (Zen mode)",
+                        subtle = true,
+                        size = 36.dp,
+                        onClick = onToggleZenMode,
+                    )
                 }
             }
         }
+        }
 
-        // Left floating glass tool capsule
+        // Side floating glass tool capsule (left edge by default, right edge in left-handed mode)
+        AnimatedVisibility(
+            visible = !state.zenMode,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier
+                .align(if (leftHanded) Alignment.CenterEnd else Alignment.CenterStart)
+                .safeDrawingPadding()
+                .padding(start = if (leftHanded) 0.dp else 16.dp, end = if (leftHanded) 16.dp else 0.dp),
+        ) {
         GlassPill(
             shape = CircleShape,
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .safeDrawingPadding()
-                .padding(start = 16.dp),
         ) {
             Column(
                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 8.dp),
@@ -406,14 +510,24 @@ fun CanvasScreen(
                 )
             }
         }
+        }
 
         // Bottom floating glass palette + monochrome sliders capsule
-        GlassPill(
-            shape = CircleShape,
+        AnimatedVisibility(
+            visible = !state.zenMode,
+            enter = fadeIn(),
+            exit = fadeOut(),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .safeDrawingPadding()
-                .padding(bottom = 14.dp, start = 76.dp, end = 24.dp),
+                .padding(
+                    bottom = 14.dp,
+                    start = if (leftHanded) 24.dp else 76.dp,
+                    end = if (leftHanded) 76.dp else 24.dp,
+                ),
+        ) {
+        GlassPill(
+            shape = CircleShape,
         ) {
             Row(
                 modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
@@ -583,6 +697,38 @@ fun CanvasScreen(
                 }
             }
         }
+        }
+
+        // Unobtrusive corner button to exit Zen mode
+        AnimatedVisibility(
+            visible = state.zenMode,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier
+                .align(if (leftHanded) Alignment.TopStart else Alignment.TopEnd)
+                .safeDrawingPadding()
+                .padding(16.dp),
+        ) {
+            GlassPill(
+                shape = CircleShape,
+                modifier = Modifier.alpha(0.72f),
+            ) {
+                Box(modifier = Modifier.padding(4.dp)) {
+                    GlassIconButton(
+                        icon = Icons.Outlined.FullscreenExit,
+                        contentDescription = "Exit Zen mode",
+                        subtle = true,
+                        size = 36.dp,
+                        onClick = onExitZenMode,
+                    )
+                }
+            }
+        }
+
+        // Live eyedropper color loupe overlay
+        eyedropper?.let { sample ->
+            EyedropperLoupeOverlay(sample = sample, leftHanded = leftHanded)
+        }
     }
 
     if (showDocumentModal) {
@@ -597,7 +743,10 @@ fun CanvasScreen(
             onResetRotation = { surfaceRef?.resetRotation() },
             onOpenHistory = { showHistoryModal = true },
             onSaveSnapshot = onSaveSnapshot,
-            onExportPng = onExportPng,
+            onSavePngToPhotos = onSavePngToPhotos,
+            onSharePng = onSharePng,
+            onSaveSvg = onSaveSvg,
+            onShareSvg = onShareSvg,
             onOpenSettings = onOpenSettings,
         )
     }
@@ -622,5 +771,126 @@ fun CanvasScreen(
             onRestoreCheckpoint = onRestoreCheckpoint,
             onRequestCheckpointPreview = onRequestCheckpointPreview,
         )
+    }
+}
+
+@Composable
+private fun EyedropperLoupeOverlay(sample: EyedropperState, leftHanded: Boolean) {
+    val p = LocalGlass.current
+    val density = LocalDensity.current
+    val loupeSizeDp = 76.dp
+    val loupeSizePx = with(density) { loupeSizeDp.toPx() }
+    val totalHeightPx = with(density) { 108.dp.toPx() }
+    val fingerClearancePx = with(density) { 74.dp.toPx() }
+    val sideOffsetPx = with(density) { 104.dp.toPx() }
+    val marginPx = with(density) { 16.dp.toPx() }
+    val reticleRadiusPx = with(density) { 7.dp.toPx() }
+    val hexText = remember(sample.sampledArgb) { "#%06X".format(sample.sampledArgb and 0xFFFFFF) }
+
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val maxW = with(density) { maxWidth.toPx() }
+        val maxH = with(density) { maxHeight.toPx() }
+
+        // Crisp sampling reticle directly at the sampled pixel
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val pt = Offset(sample.screenX, sample.screenY)
+            drawCircle(
+                color = Color.Black.copy(alpha = 0.65f),
+                radius = reticleRadiusPx + 1.5f,
+                center = pt,
+                style = DrawStroke(width = 3f),
+            )
+            drawCircle(
+                color = Color.White,
+                radius = reticleRadiusPx,
+                center = pt,
+                style = DrawStroke(width = 2.5f),
+            )
+        }
+
+        // Place the full loupe (circle + hex badge) cleanly above the fingertip;
+        // if near the top edge, shift to the unobstructed side (left for right-handed, right for left-handed).
+        val aboveY = sample.screenY - fingerClearancePx - totalHeightPx
+        val targetX: Float
+        val targetY: Float
+        if (aboveY >= marginPx) {
+            targetX = (sample.screenX - loupeSizePx * 0.5f)
+                .coerceIn(marginPx, (maxW - loupeSizePx - marginPx).coerceAtLeast(marginPx))
+            targetY = aboveY
+        } else {
+            val preferredRight = leftHanded
+            val sideX = if (preferredRight) {
+                sample.screenX + sideOffsetPx - loupeSizePx * 0.5f
+            } else {
+                sample.screenX - sideOffsetPx - loupeSizePx * 0.5f
+            }
+            val fitsPreferred = sideX in marginPx..(maxW - loupeSizePx - marginPx)
+            targetX = if (fitsPreferred) {
+                sideX
+            } else if (preferredRight) {
+                (sample.screenX - sideOffsetPx - loupeSizePx * 0.5f).coerceIn(marginPx, (maxW - loupeSizePx - marginPx).coerceAtLeast(marginPx))
+            } else {
+                (sample.screenX + sideOffsetPx - loupeSizePx * 0.5f).coerceIn(marginPx, (maxW - loupeSizePx - marginPx).coerceAtLeast(marginPx))
+            }
+            targetY = (sample.screenY - loupeSizePx * 0.5f)
+                .coerceIn(marginPx, (maxH - totalHeightPx - marginPx).coerceAtLeast(marginPx))
+        }
+
+        Column(
+            modifier = Modifier.offset { IntOffset(targetX.roundToInt(), targetY.roundToInt()) },
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(loupeSizeDp)
+                    .shadow(18.dp, CircleShape, clip = false)
+                    .clip(CircleShape),
+            ) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val d = size.minDimension
+                    val topLeft = Offset((size.width - d) * 0.5f, (size.height - d) * 0.5f)
+                    val arcSize = Size(d, d)
+                    // Top half: newly sampled color; bottom half: previous color for direct comparison
+                    drawArc(
+                        color = Color(sample.sampledArgb),
+                        startAngle = 180f,
+                        sweepAngle = 180f,
+                        useCenter = true,
+                        topLeft = topLeft,
+                        size = arcSize,
+                    )
+                    drawArc(
+                        color = Color(sample.previousArgb),
+                        startAngle = 0f,
+                        sweepAngle = 180f,
+                        useCenter = true,
+                        topLeft = topLeft,
+                        size = arcSize,
+                    )
+                    // Crisp double ring border for visibility on both light and dark canvases
+                    drawCircle(
+                        color = Color.Black.copy(alpha = 0.55f),
+                        radius = d * 0.5f - 1.5f,
+                        style = DrawStroke(width = 3f),
+                    )
+                    drawCircle(
+                        color = Color.White,
+                        radius = d * 0.5f - 4.5f,
+                        style = DrawStroke(width = 3f),
+                    )
+                }
+            }
+
+            GlassPill(shape = CircleShape) {
+                Text(
+                    text = hexText,
+                    color = p.text,
+                    fontSize = 11.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                )
+            }
+        }
     }
 }
