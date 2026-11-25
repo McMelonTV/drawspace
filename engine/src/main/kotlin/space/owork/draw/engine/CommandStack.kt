@@ -48,6 +48,14 @@ sealed interface PersistedCommand {
     ) : PersistedCommand
 
     @Serializable
+    @SerialName("replace_strokes")
+    data class ReplaceStrokesRef(
+        override val layerId: String,
+        val removedStrokeIds: List<String>,
+        val addedStrokeIds: List<String>,
+    ) : PersistedCommand
+
+    @Serializable
     @SerialName("set_paper_color")
     data class SetPaperColorRef(
         override val layerId: String = "",
@@ -145,6 +153,60 @@ sealed interface DocumentCommand {
             PersistedCommand.EraseStrokesRef(layerId = layerId, strokeIds = strokeIds)
     }
 
+    /**
+     * Atomically replaces [removedStrokeIds] with [addedStrokes] (e.g., partial-eraser carving).
+     * Undo restores [removedStrokeIds] and tombstones [addedStrokeIds]; redo reverses it.
+     */
+    data class ReplaceStrokes(
+        override val layerId: String,
+        val removedStrokeIds: List<String>,
+        val addedStrokes: List<Stroke> = emptyList(),
+        val addedStrokeIds: List<String> = addedStrokes.map { it.id },
+    ) : DocumentCommand {
+        override fun apply(document: Document, nowMs: Long): Pair<Document, DocumentDelta> {
+            var newlyAppended: List<Stroke> = emptyList()
+            val next = document.updateStrokeLayer(layerId, nowMs) { layer ->
+                val existingIds = layer.strokes.mapTo(HashSet(layer.strokes.size)) { it.id }
+                val toAppend = addedStrokes.filter { it.id !in existingIds }
+                newlyAppended = toAppend
+                val updatedStrokes = if (toAppend.isEmpty()) layer.strokes else layer.strokes + toAppend
+                layer.copy(
+                    strokes = updatedStrokes,
+                    tombstones = (layer.tombstones + removedStrokeIds) - addedStrokeIds.toSet(),
+                )
+            }
+            return next to DocumentDelta(
+                documentId = document.id,
+                layerId = layerId,
+                addedStrokes = newlyAppended,
+                addedTombstones = removedStrokeIds,
+                removedTombstones = addedStrokeIds,
+                timestampMs = nowMs,
+            )
+        }
+
+        override fun revert(document: Document, nowMs: Long): Pair<Document, DocumentDelta> {
+            val next = document.updateStrokeLayer(layerId, nowMs) { layer ->
+                layer.copy(
+                    tombstones = (layer.tombstones + addedStrokeIds) - removedStrokeIds.toSet(),
+                )
+            }
+            return next to DocumentDelta(
+                documentId = document.id,
+                layerId = layerId,
+                addedTombstones = addedStrokeIds,
+                removedTombstones = removedStrokeIds,
+                timestampMs = nowMs,
+            )
+        }
+
+        override fun toPersisted(): PersistedCommand = PersistedCommand.ReplaceStrokesRef(
+            layerId = layerId,
+            removedStrokeIds = removedStrokeIds,
+            addedStrokeIds = addedStrokeIds,
+        )
+    }
+
     data class SetPaperColor(
         val previousCustomPaperArgb: Int?,
         val newCustomPaperArgb: Int?,
@@ -185,6 +247,12 @@ sealed interface DocumentCommand {
         fun fromPersisted(cmd: PersistedCommand): DocumentCommand = when (cmd) {
             is PersistedCommand.AddStrokeRef -> AddStroke(layerId = cmd.layerId, stroke = null, strokeId = cmd.strokeId)
             is PersistedCommand.EraseStrokesRef -> EraseStrokes(layerId = cmd.layerId, strokeIds = cmd.strokeIds)
+            is PersistedCommand.ReplaceStrokesRef -> ReplaceStrokes(
+                layerId = cmd.layerId,
+                removedStrokeIds = cmd.removedStrokeIds,
+                addedStrokes = emptyList(),
+                addedStrokeIds = cmd.addedStrokeIds,
+            )
             is PersistedCommand.SetPaperColorRef -> SetPaperColor(
                 previousCustomPaperArgb = cmd.previousCustomPaperArgb,
                 newCustomPaperArgb = cmd.newCustomPaperArgb,

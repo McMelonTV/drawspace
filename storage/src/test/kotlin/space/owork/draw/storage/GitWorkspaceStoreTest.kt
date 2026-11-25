@@ -10,7 +10,9 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import space.owork.draw.engine.BrushSpec
 import space.owork.draw.engine.CanvasMode
+import space.owork.draw.engine.CommandStack
 import space.owork.draw.engine.DocumentCommand
+import space.owork.draw.engine.PartialEraser
 import space.owork.draw.engine.Stroke
 import space.owork.draw.engine.StrokePoint
 import space.owork.draw.engine.ToolType
@@ -238,6 +240,49 @@ class GitWorkspaceStoreTest {
                 jobs.awaitAll()
                 assertTrue(storeA.verifyIntegrity())
             }
+        }
+    }
+
+    @Test
+    fun `partial erase replacement survives WAL recovery, checkpoint, and undo after reopen`() = runTest {
+        val dir = tempFolder.newFolder("ws_partial_erase")
+        val docId: String
+        val orig = Stroke(
+            id = Ulid.next(),
+            brush = BrushSpec.defaultFor(ToolType.LINE),
+            points = listOf(StrokePoint(0f, 0f), StrokePoint(200f, 0f)),
+        )
+        val fragments = PartialEraser.eraseCapsule(orig, 100f, 0f, 100f, 0f, eraserRadius = 15f)!!
+        assertEquals(2, fragments.size)
+
+        GitWorkspaceStore(dir).use { store ->
+            store.initialize()
+            var doc = store.createDocument("Partial Erase Persistence", CanvasMode.Infinite)
+            docId = doc.id
+            val layerId = doc.primaryStrokeLayer().id
+            val stack = CommandStack()
+
+            val (d1, delta1) = stack.execute(doc, DocumentCommand.AddStroke(layerId, orig))
+            doc = d1
+            store.flushDelta(docId, delta1)
+
+            val (_, delta2) = stack.execute(doc, DocumentCommand.ReplaceStrokes(layerId, listOf(orig.id), fragments))
+            store.flushDelta(docId, delta2)
+        }
+
+        // Reopen without checkpoint -> WAL recovers partial erase and undo stack
+        GitWorkspaceStore(dir).use { store ->
+            store.initialize()
+            var reopened = store.loadDocument(docId)
+            assertEquals(fragments.map { it.id }.toSet(), reopened.visibleStrokes().map { it.id }.toSet())
+
+            val stack = CommandStack().apply { restore(reopened.undoStack) }
+            reopened = stack.undo(reopened)!!.first
+            assertEquals(listOf(orig.id), reopened.visibleStrokes().map { it.id })
+
+            reopened = stack.redo(reopened)!!.first
+            assertEquals(fragments.map { it.id }.toSet(), reopened.visibleStrokes().map { it.id }.toSet())
+            assertTrue(store.verifyIntegrity())
         }
     }
 }

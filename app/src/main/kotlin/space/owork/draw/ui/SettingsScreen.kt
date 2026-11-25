@@ -42,6 +42,7 @@ import space.owork.draw.engine.AppSettings
 import space.owork.draw.engine.AppTheme
 import space.owork.draw.engine.BackgroundPattern
 import space.owork.draw.engine.CanvasLockMode
+import space.owork.draw.engine.EraserMode
 import space.owork.draw.engine.StrokeSmoothingLevel
 import space.owork.draw.ui.theme.LocalGlass
 import space.owork.draw.ui.theme.glassSurface
@@ -242,6 +243,23 @@ fun SettingsScreen(
                             checked = settings.stylusOnlyDefault,
                             onCheckedChange = { enabled -> onUpdateSettings { it.copy(stylusOnlyDefault = enabled) } },
                         )
+                    }
+
+                    GlassDivider(Modifier.padding(vertical = 4.dp))
+
+                    Text("Eraser Mode", color = p.text, fontSize = 14.5.sp, fontWeight = FontWeight.SemiBold)
+                    Text(settings.eraserMode.description, color = p.secondary, fontSize = 12.5.sp)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        EraserMode.entries.forEach { mode ->
+                            GlassChip(
+                                label = mode.label,
+                                selected = settings.eraserMode == mode,
+                                onClick = { onUpdateSettings { it.copy(eraserMode = mode) } },
+                            )
+                        }
                     }
 
                     GlassDivider(Modifier.padding(vertical = 4.dp))

@@ -243,4 +243,117 @@ class EngineCoreTest {
         assertEquals(kotlin.math.round(k2), k2, 1e-3f)
         assertEquals(kotlin.math.round(k3), k3, 1e-3f)
     }
+
+    @Test
+    fun `partial eraser splits straight line cleanly with exact interpolated endpoints`() {
+        val line = Stroke(
+            id = Ulid.next(9000L),
+            brush = BrushSpec.defaultFor(ToolType.LINE), // 5.5px
+            points = listOf(
+                StrokePoint(0f, 0f, pressure = 0.2f),
+                StrokePoint(200f, 0f, pressure = 1.0f),
+            ),
+        )
+        // Erase a 20px-radius disc centered at (100, 0)
+        val result = PartialEraser.eraseCapsule(line, 100f, 0f, 100f, 0f, eraserRadius = 20f)
+        assertTrue("Expected stroke to be split", result != null && result.size == 2)
+        val left = result!![0]
+        val right = result[1]
+        assertNotEquals(line.id, left.id)
+        assertNotEquals(line.id, right.id)
+        assertNotEquals(left.id, right.id)
+        assertEquals(0f, left.points.first().x, 1e-3f)
+        assertTrue("Left fragment should end before 80", left.points.last().x < 80f && left.points.last().x > 75f)
+        assertTrue("Right fragment should start after 120", right.points.first().x > 120f && right.points.first().x < 125f)
+        assertEquals(200f, right.points.last().x, 1e-3f)
+        // Pressure is smoothly interpolated at the cut boundary
+        assertTrue(left.points.last().pressure > 0.4f && left.points.last().pressure < 0.6f)
+        assertTrue(right.points.first().pressure > 0.6f && right.points.first().pressure < 0.8f)
+    }
+
+    @Test
+    fun `partial eraser sweeps fast capsule across perpendicular stroke without skipping`() {
+        val vertical = Stroke(
+            id = Ulid.next(9100L),
+            brush = BrushSpec.defaultFor(ToolType.PEN),
+            points = listOf(StrokePoint(100f, 0f), StrokePoint(100f, 200f)),
+        )
+        // Neither capsule endpoint (0, 100) nor (200, 100) is near x=100, yet the swept capsule crosses it!
+        assertTrue(vertical.hitTestCapsule(0f, 100f, 200f, 100f, eraserRadius = 10f))
+        val fragments = PartialEraser.eraseCapsule(vertical, 0f, 100f, 200f, 100f, eraserRadius = 10f)
+        assertTrue("Expected 2 fragments from fast cross-swipe", fragments != null && fragments.size == 2)
+        assertEquals(0f, fragments!![0].points.first().y, 1e-3f)
+        assertTrue(fragments[0].points.last().y < 90f)
+        assertTrue(fragments[1].points.first().y > 110f)
+        assertEquals(200f, fragments[1].points.last().y, 1e-3f)
+    }
+
+    @Test
+    fun `partial eraser returns null when untouched and empty list when fully erased`() {
+        val stroke = Stroke(
+            id = Ulid.next(9200L),
+            brush = BrushSpec.defaultFor(ToolType.PEN),
+            points = listOf(StrokePoint(0f, 0f), StrokePoint(20f, 0f)),
+        )
+        assertEquals(null, PartialEraser.eraseCapsule(stroke, 100f, 100f, 120f, 120f, eraserRadius = 15f))
+        val wiped = PartialEraser.eraseCapsule(stroke, 10f, 0f, 10f, 0f, eraserRadius = 30f)
+        assertEquals(emptyList<Stroke>(), wiped)
+    }
+
+    @Test
+    fun `partial eraser carves hole out of bucket fill stroke while keeping outer fill intact`() {
+        val fill = Stroke(
+            id = Ulid.next(9300L),
+            brush = BrushSpec.defaultFor(ToolType.FILL, 0xFF2F66D0.toInt()),
+            points = listOf(StrokePoint(0f, 0f), StrokePoint(200f, 200f)),
+            bounds = WorldRect(0f, 0f, 200f, 200f),
+        )
+        val carved = PartialEraser.eraseCapsule(fill, 100f, 100f, 100f, 100f, eraserRadius = 25f)
+        assertTrue("Expected single carved fill stroke", carved != null && carved.size == 1)
+        val remaining = carved!![0]
+        assertEquals(ToolType.FILL, remaining.brush.tool)
+        assertFalse("Center hole must be erased", remaining.hitTest(100f, 100f, eraserRadius = 0f))
+        assertTrue("Outer corners must remain filled", remaining.hitTest(10f, 10f, eraserRadius = 0f))
+        assertTrue("Opposite corner must remain filled", remaining.hitTest(190f, 190f, eraserRadius = 0f))
+
+        // Erasing the entire fill returns emptyList
+        val wiped = PartialEraser.eraseCapsule(fill, 100f, 100f, 100f, 100f, eraserRadius = 200f)
+        assertEquals(emptyList<Stroke>(), wiped)
+    }
+
+    @Test
+    fun `replace strokes command supports undo, redo, and persistence roundtrip`() {
+        var doc = Document.createNew("Partial Erase Undo", CanvasMode.Infinite, nowMs = 9400L)
+        val layerId = doc.primaryStrokeLayer().id
+        val stack = CommandStack()
+
+        val orig = Stroke(
+            id = Ulid.next(9401L),
+            brush = BrushSpec.defaultFor(ToolType.LINE),
+            points = listOf(StrokePoint(0f, 0f), StrokePoint(200f, 0f)),
+        )
+        doc = stack.execute(doc, DocumentCommand.AddStroke(layerId, orig), nowMs = 9401L).first
+        val parts = PartialEraser.eraseCapsule(orig, 100f, 0f, 100f, 0f, eraserRadius = 15f)!!
+        assertEquals(2, parts.size)
+
+        val (afterCut, cutDelta) = stack.execute(
+            doc,
+            DocumentCommand.ReplaceStrokes(layerId, listOf(orig.id), parts),
+            nowMs = 9402L,
+        )
+        doc = afterCut
+        assertEquals(parts.map { it.id }.toSet(), doc.visibleStrokes().map { it.id }.toSet())
+        assertEquals(listOf(orig.id), cutDelta.addedTombstones)
+        assertEquals(parts.map { it.id }, cutDelta.addedStrokes.map { it.id })
+
+        // Persist and restore undo stack
+        val encoded = DocumentCodec.encodeUndoStack(doc.undoStack)
+        val restoredStack = CommandStack().apply { restore(DocumentCodec.decodeUndoStack(encoded)) }
+
+        doc = restoredStack.undo(doc, nowMs = 9403L)!!.first
+        assertEquals(listOf(orig.id), doc.visibleStrokes().map { it.id })
+
+        doc = restoredStack.redo(doc, nowMs = 9404L)!!.first
+        assertEquals(parts.map { it.id }.toSet(), doc.visibleStrokes().map { it.id }.toSet())
+    }
 }

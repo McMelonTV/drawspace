@@ -60,6 +60,7 @@ import space.owork.draw.engine.BrushSpec
 import space.owork.draw.engine.CanvasBackground
 import space.owork.draw.engine.CanvasLockMode
 import space.owork.draw.engine.CanvasMode
+import space.owork.draw.engine.EraserMode
 import space.owork.draw.engine.Stroke
 import space.owork.draw.engine.ToolType
 import space.owork.draw.engine.ViewportCamera
@@ -67,6 +68,7 @@ import space.owork.draw.engine.WorldRect
 import space.owork.draw.renderer.DrawspaceSurfaceView
 import space.owork.draw.storage.CheckpointInfo
 import space.owork.draw.ui.theme.LocalGlass
+import space.owork.draw.ui.theme.glassSurface
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -77,6 +79,7 @@ fun CanvasScreen(
     onOpenSettings: () -> Unit,
     onRename: (String) -> Unit,
     onSelectTool: (ToolType) -> Unit,
+    onSelectEraserMode: (EraserMode) -> Unit,
     onSelectColor: (Int) -> Unit,
     onAddSwatch: (Int) -> Unit,
     onRemoveSwatch: (Int) -> Unit,
@@ -92,7 +95,7 @@ fun CanvasScreen(
     onUndo: () -> Unit,
     onRedo: () -> Unit,
     onStrokeCommitted: (Stroke) -> Unit,
-    onStrokesErased: (List<String>) -> Unit,
+    onStrokesErased: (List<String>, List<Stroke>) -> Unit,
     onBucketFillRequested: (Float, Float, BrushSpec, WorldRect?) -> Unit,
     onCameraChanged: (ViewportCamera) -> Unit,
     onSaveSnapshot: (String) -> Unit,
@@ -117,7 +120,10 @@ fun CanvasScreen(
                     setListener(
                         object : DrawspaceSurfaceView.Listener {
                             override fun onStrokeCommitted(stroke: Stroke) = onStrokeCommitted(stroke)
-                            override fun onStrokesErased(strokeIds: List<String>) = onStrokesErased(strokeIds)
+                            override fun onStrokesErased(
+                                removedStrokeIds: List<String>,
+                                replacementStrokes: List<Stroke>,
+                            ) = onStrokesErased(removedStrokeIds, replacementStrokes)
                             override fun onBucketFillRequested(
                                 worldX: Float,
                                 worldY: Float,
@@ -139,6 +145,7 @@ fun CanvasScreen(
                     setDocument(doc)
                     setBrush(state.activeBrush)
                     setEraserBrush(state.eraserBrush)
+                    setEraserMode(state.eraserMode)
                     setAllowFingerDrawing(state.allowFingerDrawing)
                     setCameraLocks(state.effectiveCameraLocks)
                 }
@@ -155,6 +162,7 @@ fun CanvasScreen(
                 view.setDocument(doc)
                 view.setBrush(state.activeBrush)
                 view.setEraserBrush(state.eraserBrush)
+                view.setEraserMode(state.eraserMode)
                 view.setAllowFingerDrawing(state.allowFingerDrawing)
                 view.setCameraLocks(state.effectiveCameraLocks)
             },
@@ -483,12 +491,38 @@ fun CanvasScreen(
                         }
                     }
                 } else {
-                    Text(
-                        text = "Eraser",
-                        color = p.secondary,
-                        fontSize = 12.5.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
+                    Row(
+                        modifier = Modifier
+                            .glassSurface(CircleShape, p, fill = p.recessed, bordered = false)
+                            .padding(3.dp),
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        EraserMode.entries.forEach { mode ->
+                            val isSelected = state.eraserMode == mode
+                            Box(
+                                modifier = Modifier
+                                    .height(28.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isSelected) p.active else Color.Transparent)
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                        onClick = { onSelectEraserMode(mode) },
+                                    )
+                                    .padding(horizontal = 12.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = mode.label,
+                                    color = if (isSelected) p.onActive else p.secondary,
+                                    fontSize = 12.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    letterSpacing = (-0.1).sp,
+                                )
+                            }
+                        }
+                    }
                 }
 
                 if (state.activeTool == ToolType.LINE) {

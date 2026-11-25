@@ -25,6 +25,18 @@ enum class ToolType {
 }
 
 @Serializable
+enum class EraserMode(
+    val label: String,
+    val description: String,
+) {
+    @SerialName("stroke")
+    STROKE("Stroke", "Removes entire strokes and fills on contact"),
+
+    @SerialName("partial")
+    PARTIAL("Partial", "Erases only the portion under the eraser"),
+}
+
+@Serializable
 data class BrushSpec(
     val tool: ToolType = ToolType.PEN,
     /** ARGB 32-bit packed color (e.g. 0xFF1A1D24.toInt()). */

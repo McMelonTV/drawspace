@@ -30,6 +30,7 @@ import space.owork.draw.engine.Document
 import space.owork.draw.engine.DocumentCodec
 import space.owork.draw.engine.DocumentCommand
 import space.owork.draw.engine.DocumentDelta
+import space.owork.draw.engine.EraserMode
 import space.owork.draw.engine.Stroke
 import space.owork.draw.engine.ToolType
 import space.owork.draw.engine.ViewportCamera
@@ -79,6 +80,8 @@ data class AppUiState(
     /** The user's eraser settings, used for the stylus eraser end and press-and-hold erasing. */
     val eraserBrush: BrushSpec
         get() = toolBrushes[ToolType.ERASER] ?: BrushSpec.defaultFor(ToolType.ERASER)
+
+    val eraserMode: EraserMode get() = settings.eraserMode
 
     companion object {
         const val DEFAULT_LIGHT_INK: Int = 0xFF181A1F.toInt()
@@ -308,6 +311,15 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
         _uiState.update { it.copy(activeTool = tool) }
     }
 
+    fun setEraserMode(mode: EraserMode) {
+        _uiState.update { state ->
+            if (state.settings.eraserMode == mode) return@update state
+            val updatedSettings = state.settings.copy(eraserMode = mode)
+            saveSettings(updatedSettings)
+            state.copy(settings = updatedSettings)
+        }
+    }
+
     fun selectColor(argb: Int) {
         _uiState.update { state ->
             val nextTool = if (state.activeTool == ToolType.ERASER) ToolType.PEN else state.activeTool
@@ -413,11 +425,20 @@ class DrawspaceViewModel(application: Application) : AndroidViewModel(applicatio
         applyMutation(nextDoc, delta)
     }
 
-    fun onStrokesErased(strokeIds: List<String>) {
-        if (strokeIds.isEmpty()) return
+    fun onStrokesErased(removedStrokeIds: List<String>, replacementStrokes: List<Stroke> = emptyList()) {
+        if (removedStrokeIds.isEmpty() && replacementStrokes.isEmpty()) return
         val doc = _uiState.value.activeDocument ?: return
         val layerId = doc.primaryStrokeLayer().id
-        val (nextDoc, delta) = commandStack.execute(doc, DocumentCommand.EraseStrokes(layerId, strokeIds))
+        val command = if (replacementStrokes.isEmpty()) {
+            DocumentCommand.EraseStrokes(layerId, removedStrokeIds)
+        } else {
+            DocumentCommand.ReplaceStrokes(
+                layerId = layerId,
+                removedStrokeIds = removedStrokeIds,
+                addedStrokes = replacementStrokes,
+            )
+        }
+        val (nextDoc, delta) = commandStack.execute(doc, command)
         applyMutation(nextDoc, delta)
     }
 

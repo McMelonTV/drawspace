@@ -50,6 +50,8 @@ data class AppSettings(
     val antiAliasing: AntiAliasingMode = AntiAliasingMode.HIGH,
     val strokeSmoothing: StrokeSmoothingLevel = StrokeSmoothingLevel.LOW,
     val roundTurnsAndEnds: Boolean = true,
+    /** Whether the eraser removes whole strokes/fills or only the touched portion. */
+    val eraserMode: EraserMode = EraserMode.STROKE,
     /** Press and hold the stylus still, then press firmly, to switch to the eraser until the pen lifts. */
     val pressureEraser: Boolean = true,
     /** Raw stylus pressure (0..1) the firm press must exceed once the hold elapses. */

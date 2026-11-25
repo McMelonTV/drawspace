@@ -221,3 +221,71 @@ internal fun distancePointToSegment(
     val t = (((px - ax) * dx + (py - ay) * dy) / lenSq).coerceIn(0f, 1f)
     return hypot(px - (ax + t * dx), py - (ay + t * dy))
 }
+
+internal fun distanceSegmentToSegment(
+    ax: Float,
+    ay: Float,
+    bx: Float,
+    by: Float,
+    cx: Float,
+    cy: Float,
+    dx: Float,
+    dy: Float,
+): Float {
+    if (segmentsIntersect(ax, ay, bx, by, cx, cy, dx, dy)) return 0f
+    val d1 = distancePointToSegment(ax, ay, cx, cy, dx, dy)
+    val d2 = distancePointToSegment(bx, by, cx, cy, dx, dy)
+    val d3 = distancePointToSegment(cx, cy, ax, ay, bx, by)
+    val d4 = distancePointToSegment(dx, dy, ax, ay, bx, by)
+    return min(min(d1, d2), min(d3, d4))
+}
+
+private fun segmentsIntersect(
+    ax: Float,
+    ay: Float,
+    bx: Float,
+    by: Float,
+    cx: Float,
+    cy: Float,
+    dx: Float,
+    dy: Float,
+): Boolean {
+    fun cross(ox: Float, oy: Float, px: Float, py: Float, qx: Float, qy: Float): Float =
+        (px - ox) * (qy - oy) - (py - oy) * (qx - ox)
+
+    val d1 = cross(cx, cy, dx, dy, ax, ay)
+    val d2 = cross(cx, cy, dx, dy, bx, by)
+    val d3 = cross(ax, ay, bx, by, cx, cy)
+    val d4 = cross(ax, ay, bx, by, dx, dy)
+    if (((d1 > 0f && d2 < 0f) || (d1 < 0f && d2 > 0f)) &&
+        ((d3 > 0f && d4 < 0f) || (d3 < 0f && d4 > 0f))
+    ) {
+        return true
+    }
+    return false
+}
+
+internal fun distanceRectToSegment(
+    left: Float,
+    top: Float,
+    right: Float,
+    bottom: Float,
+    ax: Float,
+    ay: Float,
+    bx: Float,
+    by: Float,
+): Float {
+    // Check if either endpoint is inside the rect
+    if ((ax in left..right && ay in top..bottom) || (bx in left..right && by in top..bottom)) {
+        return 0f
+    }
+    // Check if segment intersects any of the 4 edges
+    val dTop = distanceSegmentToSegment(ax, ay, bx, by, left, top, right, top)
+    if (dTop <= 0f) return 0f
+    val dBottom = distanceSegmentToSegment(ax, ay, bx, by, left, bottom, right, bottom)
+    if (dBottom <= 0f) return 0f
+    val dLeft = distanceSegmentToSegment(ax, ay, bx, by, left, top, left, bottom)
+    if (dLeft <= 0f) return 0f
+    val dRight = distanceSegmentToSegment(ax, ay, bx, by, right, top, right, bottom)
+    return min(min(dTop, dBottom), min(dLeft, dRight))
+}
