@@ -316,7 +316,7 @@ internal class IncrementalLiveMesh {
     fun update(
         brush: BrushSpec,
         points: List<StrokePoint>,
-        predictedTip: StrokePoint?,
+        predictedPoints: List<StrokePoint>,
         zoom: Float,
     ) {
         synchronized(lock) {
@@ -448,7 +448,7 @@ internal class IncrementalLiveMesh {
         }
         committedFloats = cursor
 
-        // Append transient tail (last real point + optional predicted tip + end cap)
+        // Append transient tail (last real point + optional predicted polyline + end cap)
         var tailCursor = committedFloats
         val lastPt = points.last()
         val prevPt = if (points.size >= 2) points[points.lastIndex - 1] else lastPt
@@ -458,6 +458,10 @@ internal class IncrementalLiveMesh {
         if (tLen > 1e-4f) {
             tx /= tLen
             ty /= tLen
+            if (tx * lastTx + ty * lastTy < -0.5f) {
+                tx = lastTx
+                ty = lastTy
+            }
         } else {
             tx = lastTx
             ty = lastTy
@@ -467,25 +471,37 @@ internal class IncrementalLiveMesh {
         val la = StrokeMeshBuilder.computeAlpha(brush, lastPt)
         tailCursor = emitPairBody(tailCursor, lastPt.x, lastPt.y, lnx, lny, lhw, la)
 
-        if (predictedTip != null && hypot(predictedTip.x - lastPt.x, predictedTip.y - lastPt.y) > 0.5f) {
-            var ptx = predictedTip.x - lastPt.x
-            var pty = predictedTip.y - lastPt.y
+        var tipPt = lastPt
+        var tipTx = tx
+        var tipTy = ty
+        var tipNx = lnx
+        var tipNy = lny
+        var tipHw = lhw
+        var tipAlpha = la
+
+        val minPredStep = (0.75f / zoom.coerceAtLeast(0.05f)).coerceAtLeast(0.5f)
+        for (p in predictedPoints) {
+            var ptx = p.x - tipPt.x
+            var pty = p.y - tipPt.y
             val pLen = hypot(ptx, pty)
-            if (pLen > 1e-4f) {
-                ptx /= pLen
-                pty /= pLen
-            } else {
-                ptx = tx
-                pty = ty
-            }
-            val (pnx, pny) = StrokeMeshBuilder.computeNormal(brush, predictedTip, ptx, pty)
-            val phw = StrokeMeshBuilder.computeHalfWidth(brush, predictedTip)
-            val pa = StrokeMeshBuilder.computeAlpha(brush, predictedTip)
-            tailCursor = emitPairBody(tailCursor, predictedTip.x, predictedTip.y, pnx, pny, phw, pa)
-            tailCursor = emitPairCap(tailCursor, predictedTip.x, predictedTip.y, pnx, pny, ptx, pty, 1f, phw, pa)
-        } else {
-            tailCursor = emitPairCap(tailCursor, lastPt.x, lastPt.y, lnx, lny, tx, ty, 1f, lhw, la)
+            if (pLen <= minPredStep) continue
+            ptx /= pLen
+            pty /= pLen
+            // Anti-flip guard: never twist the triangle strip normal on a sudden predicted turn/reversal
+            if (ptx * tipTx + pty * tipTy < 0.25f) break
+            val (pnx, pny) = StrokeMeshBuilder.computeNormal(brush, p, ptx, pty)
+            val phw = StrokeMeshBuilder.computeHalfWidth(brush, p)
+            val pa = StrokeMeshBuilder.computeAlpha(brush, p)
+            tailCursor = emitPairBody(tailCursor, p.x, p.y, pnx, pny, phw, pa)
+            tipPt = p
+            tipTx = ptx
+            tipTy = pty
+            tipNx = pnx
+            tipNy = pny
+            tipHw = phw
+            tipAlpha = pa
         }
+        tailCursor = emitPairCap(tailCursor, tipPt.x, tipPt.y, tipNx, tipNy, tipTx, tipTy, 1f, tipHw, tipAlpha)
 
         totalFloats = tailCursor
         }

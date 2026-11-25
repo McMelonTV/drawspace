@@ -154,12 +154,12 @@ class DrawspaceSurfaceView @JvmOverloads constructor(
             override fun onActiveStrokeUpdated(
                 brush: BrushSpec,
                 points: List<StrokePoint>,
-                predictedTip: StrokePoint?,
+                predictedPoints: List<StrokePoint>,
             ) {
                 liveMesh.update(
                     brush = brush,
                     points = points,
-                    predictedTip = predictedTip,
+                    predictedPoints = predictedPoints,
                     zoom = cameraRef.get().zoom,
                 )
                 frontBufferedRenderer?.renderFrontBufferedLayer(Unit)

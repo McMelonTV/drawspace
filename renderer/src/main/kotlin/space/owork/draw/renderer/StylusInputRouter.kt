@@ -3,7 +3,6 @@ package space.owork.draw.renderer
 import android.os.Build
 import android.view.MotionEvent
 import android.view.View
-import androidx.input.motionprediction.MotionEventPredictor
 import space.owork.draw.engine.BrushSpec
 import space.owork.draw.engine.CameraLocks
 import space.owork.draw.engine.CanvasBackground
@@ -53,7 +52,7 @@ internal class StylusInputRouter(
         fun snapLineToGrid(): Boolean
         fun currentBackground(): CanvasBackground
         fun allowFingerDrawing(): Boolean
-        fun onActiveStrokeUpdated(brush: BrushSpec, points: List<StrokePoint>, predictedTip: StrokePoint?)
+        fun onActiveStrokeUpdated(brush: BrushSpec, points: List<StrokePoint>, predictedPoints: List<StrokePoint>)
         fun onActiveStrokeCommitted(stroke: Stroke)
         fun onActiveStrokeCanceled()
         fun onEraseSample(worldX: Float, worldY: Float, eraserRadiusWorld: Float)
@@ -62,7 +61,7 @@ internal class StylusInputRouter(
         fun onCameraGesture(newCamera: ViewportCamera)
     }
 
-    private val predictor: MotionEventPredictor = MotionEventPredictor.newInstance(hostView)
+    private val predictor = StrokePredictor(hostView)
 
     private var activePointerId: Int = MotionEvent.INVALID_POINTER_ID
     private var activeToolIsStylus: Boolean = false
@@ -94,7 +93,6 @@ internal class StylusInputRouter(
     private var lastAngle = 0f
 
     fun onTouchEvent(event: MotionEvent): Boolean {
-        predictor.record(event)
         val action = event.actionMasked
 
         // Any time 2+ finger touches appear, transition cleanly to 2-finger pan/zoom/rotate
@@ -142,7 +140,7 @@ internal class StylusInputRouter(
                     val start = activePoints.firstOrNull() ?: return true
                     val end = snapIfEnabled(start, extractSample(event, idx))
                     if (activePoints.size == 1) activePoints.add(end) else activePoints[1] = end
-                    callbacks.onActiveStrokeUpdated(brush, activePoints, null)
+                    callbacks.onActiveStrokeUpdated(brush, activePoints, emptyList())
                     return true
                 }
                 if (holdState != HoldState.IDLE) {
@@ -156,7 +154,10 @@ internal class StylusInputRouter(
                         maybeEngagePressureEraser()
                     }
                 }
-                appendHistoricalAndCurrent(event, idx)
+                if (!isErasing) {
+                    predictor.recordMotionEvent(event)
+                }
+                val rawLast = appendHistoricalAndCurrent(event, idx, recordForPrediction = !isErasing)
                 if (isErasing) {
                     val last = activePoints.lastOrNull()
                     if (last != null) {
@@ -165,7 +166,14 @@ internal class StylusInputRouter(
                     }
                 } else {
                     if (brush == null) return true
-                    val predicted = predictTip(event, idx)
+                    val predicted = predictor.predictTail(
+                        event = event,
+                        pointerIndex = idx,
+                        camera = callbacks.currentCamera(),
+                        committedPoints = activePoints,
+                        rawLastPoint = rawLast,
+                        smoothingBlend = callbacks.currentSmoothing().inputBlend,
+                    )
                     callbacks.onActiveStrokeUpdated(brush, activePoints, predicted)
                 }
                 return true
@@ -176,6 +184,7 @@ internal class StylusInputRouter(
                 if (event.getPointerId(idx) == activePointerId) {
                     val canceled = isCanceledEvent(event)
                     if (canceled) {
+                        if (!isErasing) predictor.recordMotionEvent(event)
                         cancelActiveStroke()
                     } else {
                         finishActiveStroke(event, idx)
@@ -188,6 +197,7 @@ internal class StylusInputRouter(
                 val idx = findActivePointerIndex(event)
                 if (idx >= 0) {
                     if (isCanceledEvent(event)) {
+                        if (!isErasing) predictor.recordMotionEvent(event)
                         cancelActiveStroke()
                     } else {
                         finishActiveStroke(event, idx)
@@ -197,6 +207,9 @@ internal class StylusInputRouter(
             }
 
             MotionEvent.ACTION_CANCEL -> {
+                if (activePointerId != MotionEvent.INVALID_POINTER_ID && !isErasing) {
+                    predictor.recordMotionEvent(event)
+                }
                 cancelActiveStroke()
                 return true
             }
@@ -208,6 +221,7 @@ internal class StylusInputRouter(
         activePointerId = event.getPointerId(pointerIndex)
         activeToolIsStylus = isStylus
         activePoints.clear()
+        predictor.reset()
 
         val selected = callbacks.currentBrush()
         val effectiveBrush = if (toolType == MotionEvent.TOOL_TYPE_ERASER) {
@@ -217,6 +231,11 @@ internal class StylusInputRouter(
         }
         activeBrush = effectiveBrush
         isErasing = effectiveBrush.tool == ToolType.ERASER
+
+        if (effectiveBrush.tool != ToolType.FILL) {
+            // Deliver unbatched digitizer samples straight to front-buffered ink for lower latency and steadier prediction.
+            hostView.requestUnbufferedDispatch(event)
+        }
 
         val rawSample = extractSample(event, pointerIndex)
         val sample = if (effectiveBrush.tool == ToolType.LINE && callbacks.snapLineToGrid()) {
@@ -232,7 +251,11 @@ internal class StylusInputRouter(
             val radius = effectiveBrush.sizeWorldPx * 0.55f / callbacks.currentCamera().zoom.coerceAtLeast(0.25f)
             callbacks.onEraseSample(sample.x, sample.y, radius)
         } else {
-            callbacks.onActiveStrokeUpdated(effectiveBrush, activePoints, null)
+            if (effectiveBrush.tool != ToolType.LINE) {
+                predictor.recordMotionEvent(event)
+                predictor.recordRealSample(rawSample)
+            }
+            callbacks.onActiveStrokeUpdated(effectiveBrush, activePoints, emptyList())
             if (isStylus && effectiveBrush.tool in PRESSURE_ERASER_TOOLS && callbacks.pressureEraser()) {
                 holdState = HoldState.TIMING
                 holdDownScreenX = event.getX(pointerIndex)
@@ -248,6 +271,7 @@ internal class StylusInputRouter(
         if (holdState != HoldState.ARMED || activePointerId == MotionEvent.INVALID_POINTER_ID) return
         if (lastRawPressure <= callbacks.pressureEraserThreshold()) return
         disarmPressureEraser()
+        predictor.reset()
         callbacks.onActiveStrokeCanceled()
         val anchor = activePoints.lastOrNull()
         activePoints.clear()
@@ -284,7 +308,10 @@ internal class StylusInputRouter(
             resetActiveStroke()
             return
         }
-        appendHistoricalAndCurrent(event, pointerIndex)
+        if (!isErasing) {
+            predictor.recordMotionEvent(event)
+        }
+        appendHistoricalAndCurrent(event, pointerIndex, recordForPrediction = false)
         if (isErasing) {
             callbacks.onEraseFinished()
         } else {
@@ -335,6 +362,7 @@ internal class StylusInputRouter(
 
     private fun resetActiveStroke() {
         disarmPressureEraser()
+        predictor.reset()
         activePointerId = MotionEvent.INVALID_POINTER_ID
         activeToolIsStylus = false
         activeBrush = null
@@ -431,7 +459,11 @@ internal class StylusInputRouter(
         lastAngle = atan2(by - ay, bx - ax)
     }
 
-    private fun appendHistoricalAndCurrent(event: MotionEvent, pointerIndex: Int) {
+    private fun appendHistoricalAndCurrent(
+        event: MotionEvent,
+        pointerIndex: Int,
+        recordForPrediction: Boolean,
+    ): StrokePoint {
         val camera = callbacks.currentCamera()
         val historyCount = event.historySize
         for (h in 0 until historyCount) {
@@ -444,9 +476,13 @@ internal class StylusInputRouter(
                 orientation = event.getHistoricalAxisValue(MotionEvent.AXIS_ORIENTATION, pointerIndex, h),
                 tMs = event.getHistoricalEventTime(h),
             )
+            if (recordForPrediction) predictor.recordRealSample(point)
             addPointIfMoved(point)
         }
-        addPointIfMoved(extractSample(event, pointerIndex))
+        val current = extractSample(event, pointerIndex)
+        if (recordForPrediction) predictor.recordRealSample(current)
+        addPointIfMoved(current)
+        return current
     }
 
     private fun extractSample(event: MotionEvent, pointerIndex: Int): StrokePoint {
@@ -459,25 +495,6 @@ internal class StylusInputRouter(
             orientation = event.getAxisValue(MotionEvent.AXIS_ORIENTATION, pointerIndex),
             tMs = event.eventTime,
         )
-    }
-
-    private fun predictTip(event: MotionEvent, pointerIndex: Int): StrokePoint? {
-        val predicted = predictor.predict() ?: return null
-        return try {
-            val pIdx = predicted.findPointerIndex(event.getPointerId(pointerIndex))
-            if (pIdx < 0) return null
-            val world = callbacks.currentCamera().screenToWorld(predicted.getX(pIdx), predicted.getY(pIdx))
-            StrokePoint(
-                x = world.x,
-                y = world.y,
-                pressure = sanitizePressure(predicted.getPressure(pIdx)),
-                tilt = predicted.getAxisValue(MotionEvent.AXIS_TILT, pIdx),
-                orientation = predicted.getAxisValue(MotionEvent.AXIS_ORIENTATION, pIdx),
-                tMs = predicted.eventTime,
-            )
-        } finally {
-            predicted.recycle()
-        }
     }
 
     private fun addPointIfMoved(point: StrokePoint) {
