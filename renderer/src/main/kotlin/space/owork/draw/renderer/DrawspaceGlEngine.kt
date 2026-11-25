@@ -31,6 +31,7 @@ internal class DrawspaceGlEngine {
     private var strokeProgram = 0
     private var backdropProgram = 0
     private var blitProgram = 0
+    private var cursorProgram = 0
     private var initialized = false
     private var maxTextureSize = 4096
 
@@ -56,6 +57,14 @@ internal class DrawspaceGlEngine {
     private var uBackdropOpacity = -1
     private var uBackdropShowOrigin = -1
     private var uBackdropIsDarkSurround = -1
+
+    // Eraser cursor ring uniforms
+    private var uCursorMvp = -1
+    private var uCursorCenter = -1
+    private var uCursorExtentWorld = -1
+    private var uCursorZoom = -1
+    private var uCursorRadiusPx = -1
+    private var uCursorDensity = -1
 
     // SSAA downsample blit uniforms
     private var uBlitTexture = -1
@@ -97,6 +106,14 @@ internal class DrawspaceGlEngine {
         strokeProgram = linkProgram(STROKE_VERTEX_SHADER, STROKE_FRAGMENT_SHADER)
         backdropProgram = linkProgram(BACKDROP_VERTEX_SHADER, BACKDROP_FRAGMENT_SHADER)
         blitProgram = linkProgram(BLIT_VERTEX_SHADER, BLIT_FRAGMENT_SHADER)
+        cursorProgram = linkProgram(CURSOR_VERTEX_SHADER, CURSOR_FRAGMENT_SHADER)
+
+        uCursorMvp = GLES30.glGetUniformLocation(cursorProgram, "uMvp")
+        uCursorCenter = GLES30.glGetUniformLocation(cursorProgram, "uCenter")
+        uCursorExtentWorld = GLES30.glGetUniformLocation(cursorProgram, "uExtentWorld")
+        uCursorZoom = GLES30.glGetUniformLocation(cursorProgram, "uZoom")
+        uCursorRadiusPx = GLES30.glGetUniformLocation(cursorProgram, "uRadiusPx")
+        uCursorDensity = GLES30.glGetUniformLocation(cursorProgram, "uDensity")
 
         uStrokeMvp = GLES30.glGetUniformLocation(strokeProgram, "uMvp")
         uStrokeColor = GLES30.glGetUniformLocation(strokeProgram, "uColor")
@@ -369,6 +386,50 @@ internal class DrawspaceGlEngine {
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
     }
 
+    /**
+     * Draws the eraser ring on top of the front-buffered layer (call right after [drawLiveMesh],
+     * which clears that layer), so it tracks the stylus with the same latency as live ink.
+     */
+    fun drawEraserCursor(
+        bufferWidth: Int,
+        bufferHeight: Int,
+        bufferTransform: FloatArray,
+        camera: ViewportCamera,
+        centerWorldX: Float,
+        centerWorldY: Float,
+        radiusWorld: Float,
+        density: Float,
+    ) {
+        ensureInitialized()
+        val zoom = camera.zoom.coerceAtLeast(1e-4f)
+        val radiusPx = (radiusWorld * zoom).coerceAtLeast(2f * density)
+        // Pad the quad so the outer half of the ring's dark outline and AA aren't clipped.
+        val extentWorld = (radiusPx + 3f * density + 2f) / zoom
+
+        GLES30.glViewport(0, 0, bufferWidth, bufferHeight)
+        GLES30.glEnable(GLES30.GL_BLEND)
+        GLES30.glBlendFuncSeparate(
+            GLES30.GL_SRC_ALPHA,
+            GLES30.GL_ONE_MINUS_SRC_ALPHA,
+            GLES30.GL_ONE,
+            GLES30.GL_ONE_MINUS_SRC_ALPHA,
+        )
+        GLES30.glUseProgram(cursorProgram)
+        GLES30.glUniformMatrix4fv(uCursorMvp, 1, false, computeWorldMvp(bufferWidth, bufferHeight, bufferTransform, camera), 0)
+        GLES30.glUniform2f(uCursorCenter, centerWorldX, centerWorldY)
+        GLES30.glUniform1f(uCursorExtentWorld, extentWorld)
+        GLES30.glUniform1f(uCursorZoom, zoom)
+        GLES30.glUniform1f(uCursorRadiusPx, radiusPx)
+        GLES30.glUniform1f(uCursorDensity, density)
+
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, quadVbo)
+        GLES30.glEnableVertexAttribArray(0)
+        GLES30.glVertexAttribPointer(0, 2, GLES30.GL_FLOAT, false, 8, 0)
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
+        GLES30.glDisableVertexAttribArray(0)
+        GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
+    }
+
     fun clearCache() {
         if (strokeCache.isEmpty()) return
         val ids = IntArray(strokeCache.size)
@@ -387,6 +448,7 @@ internal class DrawspaceGlEngine {
         if (strokeProgram != 0) GLES30.glDeleteProgram(strokeProgram)
         if (backdropProgram != 0) GLES30.glDeleteProgram(backdropProgram)
         if (blitProgram != 0) GLES30.glDeleteProgram(blitProgram)
+        if (cursorProgram != 0) GLES30.glDeleteProgram(cursorProgram)
         initialized = false
     }
 
@@ -921,6 +983,51 @@ internal class DrawspaceGlEngine {
                     float mixAmt = clamp(max(pat, originAmt), 0.0, 0.9);
                     fragColor = vec4(mix(uPaperColor, uPatternColor, mixAmt), 1.0);
                 }
+            }
+        """.trimIndent()
+
+        // Eraser cursor: a world-anchored quad whose fragment shader draws an anti-aliased
+        // two-tone ring (dark outline + light core) over a faint fill, legible on any paper.
+        private val CURSOR_VERTEX_SHADER = """
+            #version 300 es
+            precision highp float;
+            layout(location = 0) in vec2 aCorner;
+            uniform mat4 uMvp;
+            uniform vec2 uCenter;
+            uniform float uExtentWorld;
+            out vec2 vLocalWorld;
+            void main() {
+                vLocalWorld = aCorner * uExtentWorld;
+                gl_Position = uMvp * vec4(uCenter + vLocalWorld, 0.0, 1.0);
+            }
+        """.trimIndent()
+
+        private val CURSOR_FRAGMENT_SHADER = """
+            #version 300 es
+            precision highp float;
+            in vec2 vLocalWorld;
+            uniform float uZoom;
+            uniform float uRadiusPx;
+            uniform float uDensity;
+            out vec4 fragColor;
+
+            vec4 over(vec4 src, vec4 dst) {
+                float a = src.a + dst.a * (1.0 - src.a);
+                vec3 rgb = (src.rgb * src.a + dst.rgb * dst.a * (1.0 - src.a)) / max(a, 1e-5);
+                return vec4(rgb, a);
+            }
+
+            void main() {
+                float d = length(vLocalWorld) * uZoom;
+                float ringDist = abs(d - uRadiusPx);
+                float fill = (1.0 - smoothstep(uRadiusPx - 1.0, uRadiusPx, d)) * 0.16;
+                float dark = 1.0 - smoothstep(1.5 * uDensity - 0.75, 1.5 * uDensity + 0.75, ringDist);
+                float light = 1.0 - smoothstep(0.75 * uDensity - 0.5, 0.75 * uDensity + 0.5, ringDist);
+                vec4 c = vec4(1.0, 1.0, 1.0, fill);
+                c = over(vec4(0.0, 0.0, 0.0, 0.55 * dark), c);
+                c = over(vec4(1.0, 1.0, 1.0, 0.95 * light), c);
+                if (c.a <= 0.001) discard;
+                fragColor = c;
             }
         """.trimIndent()
 

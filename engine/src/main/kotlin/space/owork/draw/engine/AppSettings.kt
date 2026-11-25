@@ -50,9 +50,17 @@ data class AppSettings(
     val antiAliasing: AntiAliasingMode = AntiAliasingMode.HIGH,
     val strokeSmoothing: StrokeSmoothingLevel = StrokeSmoothingLevel.LOW,
     val roundTurnsAndEnds: Boolean = true,
+    /** Press and hold the stylus still, then press firmly, to switch to the eraser until the pen lifts. */
+    val pressureEraser: Boolean = true,
+    /** Raw stylus pressure (0..1) the firm press must exceed once the hold elapses. */
+    val pressureEraserThreshold: Float = DEFAULT_PRESSURE_ERASER_THRESHOLD,
     val stylusOnlyDefault: Boolean = false,
     val defaultLockMode: CanvasLockMode = CanvasLockMode.UNLOCKED,
     val lockPan: Boolean = false,
     val defaultPattern: BackgroundPattern = BackgroundPattern.DOT_GRID,
     val defaultPatternSpacingPx: Float = 48f,
-)
+) {
+    companion object {
+        const val DEFAULT_PRESSURE_ERASER_THRESHOLD: Float = 0.5f
+    }
+}

@@ -86,6 +86,7 @@ fun CanvasScreen(
     onToggleFingerDrawing: () -> Unit,
     onToggleSnapLineAngles: () -> Unit,
     onToggleSnapLineToGrid: () -> Unit,
+    onTogglePressureEraser: () -> Unit,
     onToggleHidePattern: () -> Unit,
     onCycleLockMode: () -> Unit,
     onUpdateBackground: ((CanvasBackground) -> CanvasBackground) -> Unit,
@@ -132,11 +133,13 @@ fun CanvasScreen(
                     setAntiAliasing(state.settings.antiAliasing)
                     setStrokeSmoothing(state.settings.strokeSmoothing)
                     setRoundTurnsAndEnds(state.settings.roundTurnsAndEnds)
+                    setPressureEraser(state.settings.pressureEraser, state.settings.pressureEraserThreshold)
                     setSnapLineAngles(state.snapLineAngles)
                     setSnapLineToGrid(state.snapLineToGrid)
                     setHidePattern(state.hidePatternTemporarily)
                     setDocument(doc)
                     setBrush(state.activeBrush)
+                    setEraserBrush(state.eraserBrush)
                     setAllowFingerDrawing(state.allowFingerDrawing)
                     setCameraLocks(state.effectiveCameraLocks)
                 }
@@ -146,11 +149,13 @@ fun CanvasScreen(
                 view.setAntiAliasing(state.settings.antiAliasing)
                 view.setStrokeSmoothing(state.settings.strokeSmoothing)
                 view.setRoundTurnsAndEnds(state.settings.roundTurnsAndEnds)
+                view.setPressureEraser(state.settings.pressureEraser, state.settings.pressureEraserThreshold)
                 view.setSnapLineAngles(state.snapLineAngles)
                 view.setSnapLineToGrid(state.snapLineToGrid)
                 view.setHidePattern(state.hidePatternTemporarily)
                 view.setDocument(doc)
                 view.setBrush(state.activeBrush)
+                view.setEraserBrush(state.eraserBrush)
                 view.setAllowFingerDrawing(state.allowFingerDrawing)
                 view.setCameraLocks(state.effectiveCameraLocks)
             },
@@ -484,6 +489,14 @@ fun CanvasScreen(
                         color = p.secondary,
                         fontSize = 12.5.sp,
                         fontWeight = FontWeight.SemiBold,
+                    )
+                }
+
+                if (state.activeTool == ToolType.ERASER) {
+                    GlassChip(
+                        label = "Hold to Erase",
+                        selected = state.settings.pressureEraser,
+                        onClick = onTogglePressureEraser,
                     )
                 }
 

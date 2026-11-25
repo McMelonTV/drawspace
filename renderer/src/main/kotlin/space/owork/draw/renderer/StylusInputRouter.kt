@@ -16,6 +16,7 @@ import space.owork.draw.engine.ToolType
 import space.owork.draw.engine.Ulid
 import space.owork.draw.engine.ViewportCamera
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -30,17 +31,24 @@ import kotlin.math.sin
  * - 2+ fingers always pan, zoom, and rotate the viewport smoothly.
  * - Palm rejection: cancels active strokes cleanly on `FLAG_CANCELED` or when a palm/multi-touch
  *   takes over, never leaving stray dots on the canvas.
+ * - Pressure eraser (matches Notein): with a freehand tool, keep the stylus within
+ *   [PRESSURE_ERASER_SLOP_PX] of where it landed for [PRESSURE_ERASER_HOLD_MS]; once that timer
+ *   fires, pressing harder than the user's threshold switches the rest of the gesture to the eraser.
  */
 internal class StylusInputRouter(
-    hostView: View,
+    private val hostView: View,
     private val callbacks: Callbacks,
 ) {
     interface Callbacks {
         fun currentCamera(): ViewportCamera
         fun currentCameraLocks(): CameraLocks
         fun currentBrush(): BrushSpec
+        fun currentEraserBrush(): BrushSpec
         fun currentSmoothing(): StrokeSmoothingLevel
         fun roundTurnsAndEnds(): Boolean
+        fun pressureEraser(): Boolean
+        /** Raw stylus pressure (0..1) that must be exceeded after the hold to engage the eraser. */
+        fun pressureEraserThreshold(): Float
         fun snapLineAngles(): Boolean
         fun snapLineToGrid(): Boolean
         fun currentBackground(): CanvasBackground
@@ -61,6 +69,20 @@ internal class StylusInputRouter(
     private var activeBrush: BrushSpec? = null
     private val activePoints = ArrayList<StrokePoint>(128)
     private var isErasing = false
+
+    // Pressure eraser tracking: TIMING (pen landed, waiting out the hold) -> ARMED (hold elapsed,
+    // waiting for a firm press) -> engaged (isErasing). Moving off the landing spot while TIMING aborts.
+    private enum class HoldState { IDLE, TIMING, ARMED }
+    private var holdState = HoldState.IDLE
+    private var holdDownScreenX = 0f
+    private var holdDownScreenY = 0f
+    private var lastRawPressure = 0f
+    private val holdRunnable = Runnable {
+        if (holdState == HoldState.TIMING) {
+            holdState = HoldState.ARMED
+            maybeEngagePressureEraser()
+        }
+    }
 
     // 2-finger navigation tracking
     private var isNavigating = false
@@ -123,6 +145,17 @@ internal class StylusInputRouter(
                     callbacks.onActiveStrokeUpdated(brush, activePoints, null)
                     return true
                 }
+                if (holdState != HoldState.IDLE) {
+                    lastRawPressure = event.getPressure(idx)
+                    if (holdState == HoldState.TIMING &&
+                        (abs(event.getX(idx) - holdDownScreenX) > PRESSURE_ERASER_SLOP_PX ||
+                            abs(event.getY(idx) - holdDownScreenY) > PRESSURE_ERASER_SLOP_PX)
+                    ) {
+                        disarmPressureEraser()
+                    } else {
+                        maybeEngagePressureEraser()
+                    }
+                }
                 appendHistoricalAndCurrent(event, idx)
                 if (isErasing) {
                     val last = activePoints.lastOrNull()
@@ -178,7 +211,7 @@ internal class StylusInputRouter(
 
         val selected = callbacks.currentBrush()
         val effectiveBrush = if (toolType == MotionEvent.TOOL_TYPE_ERASER) {
-            BrushSpec.defaultFor(ToolType.ERASER)
+            callbacks.currentEraserBrush()
         } else {
             selected
         }
@@ -200,7 +233,37 @@ internal class StylusInputRouter(
             callbacks.onEraseSample(sample.x, sample.y, radius)
         } else {
             callbacks.onActiveStrokeUpdated(effectiveBrush, activePoints, null)
+            if (isStylus && effectiveBrush.tool in PRESSURE_ERASER_TOOLS && callbacks.pressureEraser()) {
+                holdState = HoldState.TIMING
+                holdDownScreenX = event.getX(pointerIndex)
+                holdDownScreenY = event.getY(pointerIndex)
+                lastRawPressure = event.getPressure(pointerIndex)
+                hostView.postDelayed(holdRunnable, PRESSURE_ERASER_HOLD_MS)
+            }
         }
+    }
+
+    /** Hold elapsed and the pen is pressed firmly: drop the ink so far and erase for the rest of this gesture. */
+    private fun maybeEngagePressureEraser() {
+        if (holdState != HoldState.ARMED || activePointerId == MotionEvent.INVALID_POINTER_ID) return
+        if (lastRawPressure <= callbacks.pressureEraserThreshold()) return
+        disarmPressureEraser()
+        callbacks.onActiveStrokeCanceled()
+        val anchor = activePoints.lastOrNull()
+        activePoints.clear()
+        val eraser = callbacks.currentEraserBrush()
+        activeBrush = eraser
+        isErasing = true
+        if (anchor != null) {
+            activePoints.add(anchor)
+            val radius = eraser.sizeWorldPx * 0.55f / callbacks.currentCamera().zoom.coerceAtLeast(0.25f)
+            callbacks.onEraseSample(anchor.x, anchor.y, radius)
+        }
+    }
+
+    private fun disarmPressureEraser() {
+        holdState = HoldState.IDLE
+        hostView.removeCallbacks(holdRunnable)
     }
 
     private fun finishActiveStroke(event: MotionEvent, pointerIndex: Int) {
@@ -271,6 +334,7 @@ internal class StylusInputRouter(
     }
 
     private fun resetActiveStroke() {
+        disarmPressureEraser()
         activePointerId = MotionEvent.INVALID_POINTER_ID
         activeToolIsStylus = false
         activeBrush = null
@@ -449,4 +513,14 @@ internal class StylusInputRouter(
     private fun isCanceledEvent(event: MotionEvent): Boolean =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             (event.flags and MotionEvent.FLAG_CANCELED) != 0
+
+    private companion object {
+        // Values mirror Notein's pressure eraser.
+        /** How long the stylus must rest near its landing spot before a firm press can engage the eraser. */
+        const val PRESSURE_ERASER_HOLD_MS = 500L
+
+        /** Max raw-pixel drift on either axis during the hold; moving further cancels it. */
+        const val PRESSURE_ERASER_SLOP_PX = 10f
+        val PRESSURE_ERASER_TOOLS = setOf(ToolType.PEN, ToolType.PENCIL, ToolType.MARKER)
+    }
 }
