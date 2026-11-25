@@ -27,4 +27,6 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.graphics.core)
     implementation(libs.androidx.input.motionprediction)
+
+    testImplementation(libs.junit)
 }
